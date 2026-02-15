@@ -27,6 +27,11 @@ pub struct WafMetrics {
     pub bots_detected: IntCounter,
     pub challenges_issued: IntCounter,
     pub challenges_solved: IntCounter,
+    pub scrapers_blocked: IntCounter,
+    pub traps_triggered: IntCounter,
+    pub captchas_issued: IntCounter,
+    pub captchas_solved: IntCounter,
+    pub responses_obfuscated: IntCounter,
 }
 
 /// A single audit log entry representing a processed request.
@@ -91,6 +96,31 @@ impl WafMetrics {
         )
         .expect("failed to create challenges_solved counter");
 
+        let scrapers_blocked = IntCounter::with_opts(
+            Opts::new("waf_scrapers_blocked", "Total number of scrapers blocked"),
+        )
+        .expect("failed to create scrapers_blocked counter");
+
+        let traps_triggered = IntCounter::with_opts(
+            Opts::new("waf_traps_triggered", "Total number of honeypot traps triggered"),
+        )
+        .expect("failed to create traps_triggered counter");
+
+        let captchas_issued = IntCounter::with_opts(
+            Opts::new("waf_captchas_issued", "Total number of CAPTCHAs issued"),
+        )
+        .expect("failed to create captchas_issued counter");
+
+        let captchas_solved = IntCounter::with_opts(
+            Opts::new("waf_captchas_solved", "Total number of CAPTCHAs solved"),
+        )
+        .expect("failed to create captchas_solved counter");
+
+        let responses_obfuscated = IntCounter::with_opts(
+            Opts::new("waf_responses_obfuscated", "Total number of responses obfuscated"),
+        )
+        .expect("failed to create responses_obfuscated counter");
+
         registry.register(Box::new(requests_total.clone())).expect("failed to register requests_total");
         registry.register(Box::new(requests_blocked.clone())).expect("failed to register requests_blocked");
         registry.register(Box::new(request_duration.clone())).expect("failed to register request_duration");
@@ -99,6 +129,11 @@ impl WafMetrics {
         registry.register(Box::new(bots_detected.clone())).expect("failed to register bots_detected");
         registry.register(Box::new(challenges_issued.clone())).expect("failed to register challenges_issued");
         registry.register(Box::new(challenges_solved.clone())).expect("failed to register challenges_solved");
+        registry.register(Box::new(scrapers_blocked.clone())).expect("failed to register scrapers_blocked");
+        registry.register(Box::new(traps_triggered.clone())).expect("failed to register traps_triggered");
+        registry.register(Box::new(captchas_issued.clone())).expect("failed to register captchas_issued");
+        registry.register(Box::new(captchas_solved.clone())).expect("failed to register captchas_solved");
+        registry.register(Box::new(responses_obfuscated.clone())).expect("failed to register responses_obfuscated");
 
         Self {
             registry,
@@ -110,6 +145,11 @@ impl WafMetrics {
             bots_detected,
             challenges_issued,
             challenges_solved,
+            scrapers_blocked,
+            traps_triggered,
+            captchas_issued,
+            captchas_solved,
+            responses_obfuscated,
         }
     }
 }

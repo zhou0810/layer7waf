@@ -40,3 +40,17 @@ rate_limit:
 ip_reputation:
   blocklist: null
   allowlist: null
+
+# anti_scraping:
+#   enabled: false
+#   mode: detect                    # block | challenge | detect
+#   score_threshold: 0.6            # 0.0-1.0
+#   captcha:
+#     enabled: true
+#     ttl_secs: 1800                # CAPTCHA cookie validity
+#     secret: "your-hmac-key"       # HMAC signing key
+#   honeypot:
+#     enabled: true
+#     trap_path_prefix: "/.well-known/l7w-trap"
+#   obfuscation:
+#     enabled: false                # zero-width watermark injection

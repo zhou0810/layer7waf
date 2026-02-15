@@ -47,6 +47,8 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/api/stats", get(routes::stats::get_stats))
         // Bot detection statistics
         .route("/api/bot-stats", get(routes::bot_stats::get_bot_stats))
+        // Anti-scraping statistics
+        .route("/api/scraping-stats", get(routes::scraping_stats::get_scraping_stats))
         // Attach shared state and middleware
         .with_state(state)
         .layer(cors);

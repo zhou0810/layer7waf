@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use bytes::Bytes;
 use http::StatusCode;
+use layer7waf_anti_scraping::{AntiScraper, ScrapingCheckResult};
 use layer7waf_bot_detect::{BotCheckResult, BotDetector};
 use layer7waf_common::{AppConfig, WafMode};
 use layer7waf_coraza::{WafAction, WafEngine, WafTransaction};
@@ -24,6 +25,7 @@ pub struct Layer7WafProxy {
     pub rate_limiter: Option<Arc<RateLimiter>>,
     pub ip_reputation: Arc<IpReputation>,
     pub bot_detector: Option<Arc<BotDetector>>,
+    pub anti_scraper: Option<Arc<AntiScraper>>,
     pub metrics: Arc<ProxyMetrics>,
 }
 
@@ -37,6 +39,11 @@ pub struct ProxyMetrics {
     pub bots_detected: IntCounter,
     pub challenges_issued: IntCounter,
     pub challenges_solved: IntCounter,
+    pub scrapers_blocked: IntCounter,
+    pub traps_triggered: IntCounter,
+    pub captchas_issued: IntCounter,
+    pub captchas_solved: IntCounter,
+    pub responses_obfuscated: IntCounter,
 }
 
 impl ProxyMetrics {
@@ -75,6 +82,17 @@ impl ProxyMetrics {
         let challenges_solved =
             IntCounter::new("layer7waf_challenges_solved", "Total JS challenges solved").unwrap();
 
+        let scrapers_blocked =
+            IntCounter::new("layer7waf_scrapers_blocked", "Total scrapers blocked").unwrap();
+        let traps_triggered =
+            IntCounter::new("layer7waf_traps_triggered", "Total honeypot traps triggered").unwrap();
+        let captchas_issued =
+            IntCounter::new("layer7waf_captchas_issued", "Total CAPTCHAs issued").unwrap();
+        let captchas_solved =
+            IntCounter::new("layer7waf_captchas_solved", "Total CAPTCHAs solved").unwrap();
+        let responses_obfuscated =
+            IntCounter::new("layer7waf_responses_obfuscated", "Total responses obfuscated").unwrap();
+
         registry.register(Box::new(requests_total.clone())).unwrap();
         registry
             .register(Box::new(requests_blocked.clone()))
@@ -93,6 +111,21 @@ impl ProxyMetrics {
         registry
             .register(Box::new(challenges_solved.clone()))
             .unwrap();
+        registry
+            .register(Box::new(scrapers_blocked.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(traps_triggered.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(captchas_issued.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(captchas_solved.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(responses_obfuscated.clone()))
+            .unwrap();
 
         Self {
             registry,
@@ -104,6 +137,11 @@ impl ProxyMetrics {
             bots_detected,
             challenges_issued,
             challenges_solved,
+            scrapers_blocked,
+            traps_triggered,
+            captchas_issued,
+            captchas_solved,
+            responses_obfuscated,
         }
     }
 }
@@ -179,6 +217,18 @@ impl Layer7WafProxy {
             None
         };
 
+        // Initialize anti-scraper
+        let anti_scraper = if config.anti_scraping.enabled {
+            info!(
+                mode = ?config.anti_scraping.mode,
+                threshold = config.anti_scraping.score_threshold,
+                "anti-scraping enabled"
+            );
+            Some(Arc::new(AntiScraper::new(config.anti_scraping.clone())))
+        } else {
+            None
+        };
+
         let metrics = Arc::new(ProxyMetrics::new());
 
         Self {
@@ -188,6 +238,7 @@ impl Layer7WafProxy {
             rate_limiter,
             ip_reputation,
             bot_detector,
+            anti_scraper,
             metrics,
         }
     }
@@ -400,6 +451,100 @@ impl ProxyHttp for Layer7WafProxy {
             }
         }
 
+        // 2.75 Anti-scraping check
+        if let Some(ref anti_scraper) = self.anti_scraper {
+            let cookie_header = session
+                .req_header()
+                .headers
+                .get("cookie")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string());
+
+            let bot_score = ctx.bot_score.unwrap_or(0.0);
+
+            let result = anti_scraper.check_request(
+                &ctx.client_ip,
+                &path,
+                &ctx.method,
+                cookie_header.as_deref(),
+                bot_score,
+            );
+
+            match result {
+                ScrapingCheckResult::TrapTriggered => {
+                    info!(client_ip = %ctx.client_ip, "honeypot trap triggered");
+                    ctx.block_reason = Some(BlockReason::HoneypotTriggered);
+                    ctx.is_trap_request = true;
+                    self.metrics.traps_triggered.inc();
+                    self.metrics.scrapers_blocked.inc();
+                    self.metrics.requests_blocked.inc();
+                    let mut resp =
+                        ResponseHeader::build(StatusCode::NOT_FOUND, Some(4)).unwrap();
+                    resp.insert_header("content-type", "text/plain").unwrap();
+                    session.set_keepalive(None);
+                    session
+                        .write_response_header(Box::new(resp), false)
+                        .await?;
+                    session
+                        .write_response_body(Some(Bytes::from("Not Found\n")), true)
+                        .await?;
+                    return Ok(true);
+                }
+                ScrapingCheckResult::Block => {
+                    info!(client_ip = %ctx.client_ip, "request blocked by anti-scraping");
+                    ctx.block_reason = Some(BlockReason::ScraperDetected { score: 1.0 });
+                    self.metrics.scrapers_blocked.inc();
+                    self.metrics.requests_blocked.inc();
+                    let mut resp =
+                        ResponseHeader::build(StatusCode::FORBIDDEN, Some(4)).unwrap();
+                    resp.insert_header("content-type", "text/plain").unwrap();
+                    session.set_keepalive(None);
+                    session
+                        .write_response_header(Box::new(resp), false)
+                        .await?;
+                    session
+                        .write_response_body(Some(Bytes::from("Forbidden: Scraping detected\n")), true)
+                        .await?;
+                    return Ok(true);
+                }
+                ScrapingCheckResult::Challenge(html) => {
+                    info!(client_ip = %ctx.client_ip, "issuing CAPTCHA for anti-scraping");
+                    self.metrics.captchas_issued.inc();
+                    let body_bytes = Bytes::from(html);
+                    let mut resp =
+                        ResponseHeader::build(StatusCode::OK, Some(4)).unwrap();
+                    resp.insert_header("content-type", "text/html; charset=utf-8")
+                        .unwrap();
+                    resp.insert_header("cache-control", "no-store").unwrap();
+                    session.set_keepalive(None);
+                    session
+                        .write_response_header(Box::new(resp), false)
+                        .await?;
+                    session
+                        .write_response_body(Some(body_bytes), true)
+                        .await?;
+                    return Ok(true);
+                }
+                ScrapingCheckResult::Detect { score } => {
+                    ctx.scraping_score = Some(score);
+                    if score >= 0.6 {
+                        self.metrics.scrapers_blocked.inc();
+                    }
+                    debug!(client_ip = %ctx.client_ip, score, "anti-scraping score (detect mode)");
+                }
+                ScrapingCheckResult::Allow => {
+                    // Check if CAPTCHA was solved (cookie present)
+                    if cookie_header
+                        .as_deref()
+                        .map(|c| c.contains("__l7w_captcha="))
+                        .unwrap_or(false)
+                    {
+                        self.metrics.captchas_solved.inc();
+                    }
+                }
+            }
+        }
+
         // 3. WAF check (request headers phase)
         let waf_mode = ctx.route_index.and_then(|i| {
             let config = self.config.read().unwrap();
@@ -593,6 +738,19 @@ impl ProxyHttp for Layer7WafProxy {
             }
         }
 
+        // Anti-scraping: check if we need to process the response body
+        if self.anti_scraper.is_some() {
+            if let Some(ct) = upstream_response.headers.get("content-type") {
+                let ct_str = ct.to_str().unwrap_or("");
+                if ct_str.contains("text/html") {
+                    ctx.should_process_response = true;
+                    ctx.response_content_type = Some(ct_str.to_string());
+                    // Remove Content-Length since we'll modify the body
+                    upstream_response.remove_header("content-length");
+                }
+            }
+        }
+
         // Add security headers
         upstream_response
             .insert_header("x-content-type-options", "nosniff")
@@ -602,6 +760,49 @@ impl ProxyHttp for Layer7WafProxy {
             .unwrap();
 
         Ok(())
+    }
+
+    fn response_body_filter(
+        &self,
+        _session: &mut Session,
+        body: &mut Option<Bytes>,
+        end_of_stream: bool,
+        ctx: &mut Self::CTX,
+    ) -> Result<Option<std::time::Duration>> {
+        if !ctx.should_process_response {
+            return Ok(None);
+        }
+
+        // Buffer body chunks
+        if let Some(ref data) = body {
+            // Enforce max buffer size (2 MB)
+            if ctx.response_body_buffer.len() + data.len() > 2 * 1024 * 1024 {
+                ctx.should_process_response = false;
+                return Ok(None);
+            }
+            ctx.response_body_buffer.extend_from_slice(data);
+        }
+
+        if end_of_stream {
+            if let Some(ref anti_scraper) = self.anti_scraper {
+                let ct = ctx.response_content_type.as_deref();
+                if let Some(modified) =
+                    anti_scraper.process_response(&ctx.client_ip, ct, &ctx.response_body_buffer)
+                {
+                    self.metrics.responses_obfuscated.inc();
+                    *body = Some(Bytes::from(modified));
+                    ctx.response_body_buffer.clear();
+                    return Ok(None);
+                }
+            }
+            // No modification needed, return original buffered body
+            *body = Some(Bytes::from(std::mem::take(&mut ctx.response_body_buffer)));
+        } else {
+            // Suppress intermediate chunks; we'll send everything at end_of_stream
+            *body = None;
+        }
+
+        Ok(None)
     }
 
     async fn logging(&self, _session: &mut Session, _error: Option<&pingora_core::Error>, ctx: &mut Self::CTX) {

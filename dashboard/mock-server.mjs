@@ -11,6 +11,11 @@ let rateLimitedRequests = 421;
 let botsDetected = 234;
 let challengesIssued = 512;
 let challengesSolved = 389;
+let scrapersBlocked = 87;
+let trapsTriggered = 42;
+let captchasIssued = 156;
+let captchasSolved = 98;
+let responsesObfuscated = 3421;
 let customRules = [
   'SecRule ARGS "@contains <script>" "id:1001,phase:1,deny,status:403,msg:XSS attempt"',
   'SecRule REQUEST_URI "@rx /etc/passwd" "id:1002,phase:1,deny,status:403,msg:Path traversal"',
@@ -175,6 +180,15 @@ setInterval(() => {
     challengesIssued += Math.floor(Math.random() * 3) + 1;
     challengesSolved += Math.floor(Math.random() * 2);
   }
+  if (Math.random() < 0.04) {
+    scrapersBlocked += Math.floor(Math.random() * 2) + 1;
+    trapsTriggered += Math.floor(Math.random() * 2);
+    captchasIssued += Math.floor(Math.random() * 3) + 1;
+    captchasSolved += Math.floor(Math.random() * 2);
+  }
+  if (Math.random() < 0.1) {
+    responsesObfuscated += Math.floor(Math.random() * 10) + 1;
+  }
 }, 1000);
 
 const server = createServer((req, res) => {
@@ -275,6 +289,16 @@ const server = createServer((req, res) => {
       challenges_issued: challengesIssued,
       challenges_solved: challengesSolved,
       challenge_pass_rate: Math.round(passRate * 1000) / 1000,
+    });
+  } else if (path === "/api/scraping-stats" && req.method === "GET") {
+    const passRate = captchasIssued > 0 ? captchasSolved / captchasIssued : 0;
+    json({
+      scrapers_blocked: scrapersBlocked,
+      traps_triggered: trapsTriggered,
+      captchas_issued: captchasIssued,
+      captchas_solved: captchasSolved,
+      responses_obfuscated: responsesObfuscated,
+      captcha_pass_rate: Math.round(passRate * 1000) / 1000,
     });
   } else if (path === "/api/logs" && req.method === "GET") {
     const limit = parseInt(url.searchParams.get("limit") || "100", 10);

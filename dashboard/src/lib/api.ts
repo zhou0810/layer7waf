@@ -105,6 +105,15 @@ export interface BotStatsResponse {
   challenge_pass_rate: number;
 }
 
+export interface ScrapingStatsResponse {
+  scrapers_blocked: number;
+  traps_triggered: number;
+  captchas_issued: number;
+  captchas_solved: number;
+  responses_obfuscated: number;
+  captcha_pass_rate: number;
+}
+
 // API response types
 
 export interface HealthResponse {
@@ -216,6 +225,8 @@ export const api = {
     }),
 
   getBotStats: () => fetchJSON<BotStatsResponse>(`${BASE}/bot-stats`),
+
+  getScrapingStats: () => fetchJSON<ScrapingStatsResponse>(`${BASE}/scraping-stats`),
 
   getLogs: (params?: { limit?: number; offset?: number; ip?: string; rule_id?: string }) => {
     const searchParams = new URLSearchParams();

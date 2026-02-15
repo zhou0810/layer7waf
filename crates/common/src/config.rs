@@ -14,6 +14,8 @@ pub struct AppConfig {
     pub ip_reputation: IpReputationConfig,
     #[serde(default)]
     pub bot_detection: BotDetectionConfig,
+    #[serde(default)]
+    pub anti_scraping: AntiScrapingConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -245,6 +247,92 @@ impl Default for JsChallengeConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AntiScrapingConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_anti_scraping_mode")]
+    pub mode: AntiScrapingMode,
+    #[serde(default)]
+    pub captcha: CaptchaConfig,
+    #[serde(default)]
+    pub honeypot: HoneypotConfig,
+    #[serde(default)]
+    pub obfuscation: ObfuscationConfig,
+    #[serde(default = "default_scraping_score_threshold")]
+    pub score_threshold: f64,
+}
+
+impl Default for AntiScrapingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            mode: AntiScrapingMode::Detect,
+            captcha: CaptchaConfig::default(),
+            honeypot: HoneypotConfig::default(),
+            obfuscation: ObfuscationConfig::default(),
+            score_threshold: default_scraping_score_threshold(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AntiScrapingMode {
+    Block,
+    Challenge,
+    Detect,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CaptchaConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_captcha_ttl")]
+    pub ttl_secs: u64,
+    #[serde(default = "default_challenge_secret")]
+    pub secret: String,
+}
+
+impl Default for CaptchaConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            ttl_secs: default_captcha_ttl(),
+            secret: default_challenge_secret(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HoneypotConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_trap_path_prefix")]
+    pub trap_path_prefix: String,
+}
+
+impl Default for HoneypotConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            trap_path_prefix: default_trap_path_prefix(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObfuscationConfig {
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+impl Default for ObfuscationConfig {
+    fn default() -> Self {
+        Self { enabled: false }
+    }
+}
+
 // Default value helpers
 fn default_admin_listen() -> String {
     "127.0.0.1:9090".to_string()
@@ -293,6 +381,18 @@ fn default_challenge_difficulty() -> u32 {
 }
 fn default_challenge_ttl() -> u64 {
     3600
+}
+fn default_anti_scraping_mode() -> AntiScrapingMode {
+    AntiScrapingMode::Detect
+}
+fn default_scraping_score_threshold() -> f64 {
+    0.6
+}
+fn default_captcha_ttl() -> u64 {
+    1800
+}
+fn default_trap_path_prefix() -> String {
+    "/.well-known/l7w-trap".to_string()
 }
 fn default_challenge_secret() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};

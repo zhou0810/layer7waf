@@ -8,6 +8,7 @@ members = [
     "crates/admin",
     "crates/common",
     "crates/bot-detect",
+    "crates/anti-scraping",
 ]
 
 [workspace.dependencies]
@@ -69,3 +70,4 @@ layer7waf-rate-limit = { path = "crates/rate-limit" }
 layer7waf-ip-reputation = { path = "crates/ip-reputation" }
 layer7waf-admin = { path = "crates/admin" }
 layer7waf-bot-detect = { path = "crates/bot-detect" }
+layer7waf-anti-scraping = { path = "crates/anti-scraping" }

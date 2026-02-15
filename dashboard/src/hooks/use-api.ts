@@ -75,6 +75,14 @@ export function useTestRule() {
   });
 }
 
+export function useScrapingStats() {
+  return useQuery({
+    queryKey: ["scraping-stats"],
+    queryFn: api.getScrapingStats,
+    refetchInterval: 5000,
+  });
+}
+
 export function useBotStats() {
   return useQuery({
     queryKey: ["bot-stats"],

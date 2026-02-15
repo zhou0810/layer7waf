@@ -28,7 +28,7 @@ A high-performance Layer 7 Web Application Firewall built with [Pingora](https:/
 ### Request Lifecycle
 
 ```
-1. request_filter()   → IP check → Rate limit → Bot detection → Coraza WAF
+1. request_filter()   → IP check → Rate limit → Bot detection → Anti-scraping → Coraza WAF
 2. upstream_peer()    → Select upstream (weighted round-robin)
 3. response_filter()  → Coraza response headers/body check
 4. logging()          → Structured JSON log, Prometheus metrics
@@ -40,6 +40,7 @@ A high-performance Layer 7 Web Application Firewall built with [Pingora](https:/
 - **Rate Limiting**: Token bucket and sliding window algorithms with per-IP tracking
 - **IP Reputation**: CIDR prefix trie for fast blocklist/allowlist lookups with hot-reload
 - **Bot Detection**: HTTP fingerprinting, User-Agent classification, JS proof-of-work challenges
+- **Anti-Scraping**: Math CAPTCHA challenges, content honeypot traps, zero-width character watermarking
 - **Reverse Proxy**: Weighted round-robin upstream selection via Pingora
 - **Admin REST API**: Health, metrics, config, rules management, audit logs, bot stats
 - **Web Dashboard**: React/TypeScript UI for monitoring, configuration, and bot analytics
@@ -55,6 +56,7 @@ layer7waf/
 │   ├── rate-limit/     # Token bucket & sliding window rate limiters
 │   ├── ip-reputation/  # CIDR prefix trie for IP blocklist/allowlist
 │   ├── bot-detect/     # Bot detection: fingerprinting, JS challenges, scoring
+│   ├── anti-scraping/  # Anti-scraping: CAPTCHA, honeypots, obfuscation
 │   ├── admin/          # Axum REST API server
 │   └── common/         # Shared config structs and error types
 ├── dashboard/          # React/TypeScript web dashboard
@@ -139,6 +141,20 @@ bot_detection:
   known_bots_allowlist:
     - Googlebot
     - Bingbot
+
+anti_scraping:
+  enabled: true
+  mode: detect                     # block | challenge | detect
+  score_threshold: 0.6            # 0.0-1.0
+  captcha:
+    enabled: true
+    ttl_secs: 1800                # CAPTCHA cookie validity
+    secret: "your-hmac-key"
+  honeypot:
+    enabled: true
+    trap_path_prefix: "/.well-known/l7w-trap"
+  obfuscation:
+    enabled: false                # zero-width watermark injection
 ```
 
 ## Admin API
@@ -156,6 +172,7 @@ bot_detection:
 | `/api/logs` | GET | Query audit logs |
 | `/api/stats` | GET | Traffic statistics |
 | `/api/bot-stats` | GET | Bot detection statistics |
+| `/api/scraping-stats` | GET | Anti-scraping statistics |
 
 ```bash
 # Check health
@@ -205,6 +222,41 @@ curl http://localhost:9090/api/bot-stats
 # Returns: { bots_detected, challenges_issued, challenges_solved, challenge_pass_rate }
 ```
 
+## Anti-Scraping
+
+The anti-scraping module adds three complementary layers of protection against content scraping.
+
+### Mechanisms
+
+- **Math CAPTCHA** — Self-hosted SVG-rendered arithmetic challenges with HMAC-signed cookies. No external dependencies. Suspected scrapers must solve a math problem; the answer sets a signed cookie allowing subsequent requests through.
+- **Content Honeypots** — Hidden links injected before `</body>` in HTML responses. The links are invisible to users (off-screen positioning, `aria-hidden`, `tabindex="-1"`) but scrapers following all links will hit the trap path, immediately flagging the IP.
+- **Zero-Width Watermarks** — Invisible Unicode characters (U+200B, U+200C) injected into HTML text nodes, seeded per-IP. If scraped content appears elsewhere, the watermark can be decoded to identify the source IP.
+
+### Scoring
+
+Each IP accumulates a scraping score based on behavioral signals:
+
+| Signal | Score Impact |
+|---|---|
+| Honeypot trap triggered | +1.0 |
+| High request rate (>1 rps) | +0.3 |
+| High unique path count (>20) | +0.2 |
+| Bot detection score | +score * 0.3 |
+| CAPTCHA solved | -0.5 |
+
+### Modes
+
+- **`block`** — IPs exceeding the score threshold are rejected with 403.
+- **`challenge`** — IPs exceeding the threshold receive a math CAPTCHA page. If already solved (valid cookie), the request proceeds.
+- **`detect`** — All requests proceed, but scraping scores are recorded in metrics.
+
+```bash
+# View anti-scraping stats
+curl http://localhost:9090/api/scraping-stats
+
+# Returns: { scrapers_blocked, traps_triggered, captchas_issued, captchas_solved, responses_obfuscated, captcha_pass_rate }
+```
+
 ## Dashboard
 
 The React/TypeScript dashboard is served from the admin API when `server.admin.dashboard` is enabled.
@@ -219,7 +271,7 @@ npm run dev:mock    # Starts mock server on :9090 + Vite on :5173
 npm run build       # Output in dashboard/dist/
 ```
 
-Pages: Dashboard (traffic overview), Audit Logs, WAF Rules, Bot Detection (analytics + pie chart), Configuration (structured editor), Metrics (Prometheus).
+Pages: Dashboard (traffic overview), Audit Logs, WAF Rules, Bot Detection (analytics + pie chart), Anti-Scraping (scraper stats + honeypot/CAPTCHA metrics), Configuration (structured editor), Metrics (Prometheus).
 
 ## Docker
 
@@ -233,11 +285,14 @@ This starts the WAF proxy on port 8080 and the admin API on port 9090, with an n
 ## Testing
 
 ```bash
-# Run all unit tests (56 tests)
+# Run all unit tests
 cargo test --workspace
 
 # Run bot detection tests only
 cargo test -p layer7waf-bot-detect
+
+# Run anti-scraping tests only
+cargo test -p layer7waf-anti-scraping
 
 # Build dashboard
 cd dashboard && npm run build
@@ -251,7 +306,7 @@ cd dashboard && npm run build
 - **Phase 1** &#10003;: WAF core, rate limiting, IP reputation, admin API
 - **Phase 2** &#10003;: Web dashboard (React + TypeScript)
 - **Phase 3** &#10003;: Bot detection (HTTP fingerprinting, JS challenges, scoring)
-- **Phase 4**: Anti-scraping (CAPTCHA, content honeypots, dynamic obfuscation)
+- **Phase 4** &#10003;: Anti-scraping (CAPTCHA, content honeypots, dynamic obfuscation)
 - **Future**: TLS fingerprinting (JA3/JA4) when Pingora exposes Client Hello data
 
 ## License

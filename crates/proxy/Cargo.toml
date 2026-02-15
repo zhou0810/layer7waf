@@ -14,6 +14,7 @@ layer7waf-rate-limit = { workspace = true }
 layer7waf-ip-reputation = { workspace = true }
 layer7waf-admin = { workspace = true }
 layer7waf-bot-detect = { workspace = true }
+layer7waf-anti-scraping = { workspace = true }
 pingora = { workspace = true }
 pingora-core = { workspace = true }
 pingora-proxy = { workspace = true }

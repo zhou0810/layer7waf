@@ -6,6 +6,7 @@ import {
   Settings,
   BarChart3,
   Bot,
+  ShieldBan,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
@@ -15,6 +16,7 @@ const navItems = [
   { to: "/logs", icon: ScrollText, label: "Audit Logs" },
   { to: "/rules", icon: Shield, label: "WAF Rules" },
   { to: "/bots", icon: Bot, label: "Bot Detection" },
+  { to: "/anti-scraping", icon: ShieldBan, label: "Anti-Scraping" },
   { to: "/config", icon: Settings, label: "Configuration" },
   { to: "/metrics", icon: BarChart3, label: "Metrics" },
 ];
