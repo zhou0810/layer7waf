@@ -5,21 +5,21 @@ A high-performance Layer 7 Web Application Firewall built with [Pingora](https:/
 ## Architecture
 
 ```
-                    ┌─────────────────────────────────────────────┐
-                    │              Layer 7 WAF                     │
-  Client ──HTTP──►  │                                              │
-                    │  ┌──────────┐  ┌────────┐  ┌────────────┐  │
-                    │  │ Pingora  │  │ Coraza │  │ Admin API  │  │
-                    │  │ Proxy    ├─►│ Bridge ├─►│ (Axum)     │  │
-                    │  │ Engine   │  │ (FFI)  │  │ + REST API │  │
-                    │  └────┬─────┘  └────────┘  └────────────┘  │
-                    │       │                                      │
-                    │  ┌────┴─────┐  ┌──────────┐  ┌──────────┐  │
-                    │  │ Rate     │  │ IP       │  │ Metrics  │  │
-                    │  │ Limiter  │  │ Reputa-  │  │ (Prom)   │  │
-                    │  │          │  │ tion     │  │          │  │
-                    │  └──────────┘  └──────────┘  └──────────┘  │
-                    └──────────────────┬──────────────────────────┘
+                    ┌──────────────────────────────────────────────────┐
+                    │                 Layer 7 WAF                        │
+  Client ──HTTP──►  │                                                    │
+                    │  ┌──────────┐  ┌────────┐  ┌────────────────────┐ │
+                    │  │ Pingora  │  │ Coraza │  │ Admin API (Axum)   │ │
+                    │  │ Proxy    ├─►│ Bridge ├─►│ + React Dashboard  │ │
+                    │  │ Engine   │  │ (FFI)  │  │ + REST API         │ │
+                    │  └────┬─────┘  └────────┘  └────────────────────┘ │
+                    │       │                                            │
+                    │  ┌────┴─────┐  ┌──────────┐  ┌───────────────┐   │
+                    │  │ Rate     │  │ IP       │  │ Bot Detection │   │
+                    │  │ Limiter  │  │ Reputa-  │  │ (Fingerprint, │   │
+                    │  │          │  │ tion     │  │  JS Challenge)│   │
+                    │  └──────────┘  └──────────┘  └───────────────┘   │
+                    └──────────────────┬────────────────────────────────┘
                                        │
                                        ▼
                                   Upstream Servers
@@ -28,7 +28,7 @@ A high-performance Layer 7 Web Application Firewall built with [Pingora](https:/
 ### Request Lifecycle
 
 ```
-1. request_filter()   → IP check → Rate limit → Coraza request headers/body
+1. request_filter()   → IP check → Rate limit → Bot detection → Coraza WAF
 2. upstream_peer()    → Select upstream (weighted round-robin)
 3. response_filter()  → Coraza response headers/body check
 4. logging()          → Structured JSON log, Prometheus metrics
@@ -39,8 +39,10 @@ A high-performance Layer 7 Web Application Firewall built with [Pingora](https:/
 - **WAF Engine**: Coraza WAF via Go FFI bridge with OWASP CRS compatibility
 - **Rate Limiting**: Token bucket and sliding window algorithms with per-IP tracking
 - **IP Reputation**: CIDR prefix trie for fast blocklist/allowlist lookups with hot-reload
+- **Bot Detection**: HTTP fingerprinting, User-Agent classification, JS proof-of-work challenges
 - **Reverse Proxy**: Weighted round-robin upstream selection via Pingora
-- **Admin REST API**: Health, metrics, config, rules management, audit logs
+- **Admin REST API**: Health, metrics, config, rules management, audit logs, bot stats
+- **Web Dashboard**: React/TypeScript UI for monitoring, configuration, and bot analytics
 - **Observability**: Prometheus metrics, structured JSON logging
 
 ## Project Structure
@@ -52,8 +54,10 @@ layer7waf/
 │   ├── coraza/         # Coraza WAF FFI bridge (Go → C shared lib → Rust)
 │   ├── rate-limit/     # Token bucket & sliding window rate limiters
 │   ├── ip-reputation/  # CIDR prefix trie for IP blocklist/allowlist
+│   ├── bot-detect/     # Bot detection: fingerprinting, JS challenges, scoring
 │   ├── admin/          # Axum REST API server
 │   └── common/         # Shared config structs and error types
+├── dashboard/          # React/TypeScript web dashboard
 ├── config/             # YAML configuration files
 ├── docker/             # Dockerfile and docker-compose
 ├── rules/              # WAF rule files (OWASP CRS)
@@ -122,6 +126,19 @@ rate_limit:
 ip_reputation:
   blocklist: "/path/to/blocklist.txt"
   allowlist: "/path/to/allowlist.txt"
+
+bot_detection:
+  enabled: true
+  mode: challenge            # block | challenge | detect
+  score_threshold: 0.7       # 0.0-1.0, requests scoring above are flagged
+  js_challenge:
+    enabled: true
+    difficulty: 16           # leading zero bits for proof-of-work
+    ttl_secs: 3600           # challenge cookie validity
+    secret: "your-hmac-key"  # HMAC signing key (random default)
+  known_bots_allowlist:
+    - Googlebot
+    - Bingbot
 ```
 
 ## Admin API
@@ -138,6 +155,7 @@ ip_reputation:
 | `/api/rules/test` | POST | Test rule against sample request |
 | `/api/logs` | GET | Query audit logs |
 | `/api/stats` | GET | Traffic statistics |
+| `/api/bot-stats` | GET | Bot detection statistics |
 
 ```bash
 # Check health
@@ -152,6 +170,57 @@ curl -X POST http://localhost:9090/api/rules \
   -d '{"rule":"SecRule ARGS \"@contains test\" \"id:1001,phase:1,deny,status:403\""}'
 ```
 
+## Bot Detection
+
+The bot detection module sits between rate limiting and WAF checks in the request pipeline, combining multiple signals to identify automated traffic.
+
+### Detection Signals
+
+- **HTTP Fingerprinting** — SHA-256 hash of ordered header names, User-Agent family extraction, Accept header combination hash. Different tools produce distinct header orderings that serve as fingerprints.
+- **User-Agent Classification** — Requests are classified as `KnownGoodBot` (Googlebot, Bingbot, etc.), `KnownBadBot` (curl, wget, python-requests, scrapy), `Suspicious` (generic bot/crawler/spider patterns), or `LikelyHuman` (standard browser UAs).
+- **JS Proof-of-Work Challenge** — Suspected bots receive an HTML page with embedded JavaScript that computes SHA-256 hashes until finding one with the required leading zero bits. On success, an HMAC-signed cookie is set and the browser redirects to the original URL. Real browsers solve this transparently; headless scripts and CLI tools cannot.
+
+### Scoring
+
+Each request receives a composite bot score from 0.0 (human) to 1.0 (bot):
+
+| Signal | Score Impact |
+|---|---|
+| Known bad bot UA (curl, scrapy, etc.) | +0.9 |
+| Suspicious UA (generic bot patterns) | +0.5 |
+| Missing standard Accept header | +0.2 |
+| Valid JS challenge cookie | -0.8 |
+| Known good bot (Googlebot, etc.) | 0.0 (always allowed) |
+
+### Modes
+
+- **`block`** — Requests exceeding the score threshold are rejected with 403.
+- **`challenge`** — Requests exceeding the threshold receive a JS challenge page. If the challenge is already solved (valid cookie), the request proceeds.
+- **`detect`** — All requests proceed, but bot scores are recorded in metrics for monitoring.
+
+```bash
+# View bot detection stats
+curl http://localhost:9090/api/bot-stats
+
+# Returns: { bots_detected, challenges_issued, challenges_solved, challenge_pass_rate }
+```
+
+## Dashboard
+
+The React/TypeScript dashboard is served from the admin API when `server.admin.dashboard` is enabled.
+
+```bash
+# Development with mock API
+cd dashboard
+npm install
+npm run dev:mock    # Starts mock server on :9090 + Vite on :5173
+
+# Production build
+npm run build       # Output in dashboard/dist/
+```
+
+Pages: Dashboard (traffic overview), Audit Logs, WAF Rules, Bot Detection (analytics + pie chart), Configuration (structured editor), Metrics (Prometheus).
+
 ## Docker
 
 ```bash
@@ -164,8 +233,14 @@ This starts the WAF proxy on port 8080 and the admin API on port 9090, with an n
 ## Testing
 
 ```bash
-# Run unit tests (30 tests)
+# Run all unit tests (56 tests)
 cargo test --workspace
+
+# Run bot detection tests only
+cargo test -p layer7waf-bot-detect
+
+# Build dashboard
+cd dashboard && npm run build
 
 # Run E2E tests (requires running docker-compose stack)
 ./tests/e2e/test_waf.sh
@@ -173,10 +248,11 @@ cargo test --workspace
 
 ## Roadmap
 
-- **Phase 1** (current): WAF core, rate limiting, IP reputation, admin API
-- **Phase 2**: Web dashboard (React + TypeScript)
-- **Phase 3**: Bot detection (JA3/JA4 fingerprinting, JS challenges)
+- **Phase 1** &#10003;: WAF core, rate limiting, IP reputation, admin API
+- **Phase 2** &#10003;: Web dashboard (React + TypeScript)
+- **Phase 3** &#10003;: Bot detection (HTTP fingerprinting, JS challenges, scoring)
 - **Phase 4**: Anti-scraping (CAPTCHA, content honeypots, dynamic obfuscation)
+- **Future**: TLS fingerprinting (JA3/JA4) when Pingora exposes Client Hello data
 
 ## License
 
