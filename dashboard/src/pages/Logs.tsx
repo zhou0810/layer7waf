@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { ErrorAlert } from "@/components/ErrorAlert";
+import { Skeleton } from "@/components/Skeleton";
 import {
   Table,
   TableHeader,
@@ -23,7 +25,7 @@ export function Logs() {
   const [page, setPage] = useState(0);
   const [autoRefresh, setAutoRefresh] = useState(false);
 
-  const { data, isLoading, refetch } = useLogs({
+  const { data, isLoading, error, refetch } = useLogs({
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
     ip: ipFilter || undefined,
@@ -87,6 +89,10 @@ export function Logs() {
         )}
       </div>
 
+      {error && (
+        <ErrorAlert message={error.message} onRetry={() => refetch()} />
+      )}
+
       {/* Table */}
       <Table>
         <TableHeader>
@@ -101,12 +107,14 @@ export function Logs() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading ? (
-            <TableRow>
-              <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                Loading...
-              </TableCell>
-            </TableRow>
+          {isLoading && !data ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <TableRow key={i}>
+                {Array.from({ length: 7 }).map((_, j) => (
+                  <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                ))}
+              </TableRow>
+            ))
           ) : data && data.entries.length > 0 ? (
             data.entries.map((entry) => (
               <TableRow key={entry.id}>

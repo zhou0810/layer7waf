@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { ErrorAlert } from "@/components/ErrorAlert";
+import { Skeleton } from "@/components/Skeleton";
 import {
   Table,
   TableHeader,
@@ -18,7 +20,7 @@ import {
 import { Trash2, Plus, FlaskConical, FileText } from "lucide-react";
 
 export function Rules() {
-  const { data: rules, isLoading } = useRules();
+  const { data: rules, isLoading, error, refetch } = useRules();
   const addRule = useAddRule();
   const deleteRule = useDeleteRule();
   const testRule = useTestRule();
@@ -71,6 +73,10 @@ export function Rules() {
         </p>
       </div>
 
+      {error && (
+        <ErrorAlert message={error.message} onRetry={() => refetch()} />
+      )}
+
       {/* Rule files */}
       <Card>
         <CardHeader>
@@ -80,7 +86,12 @@ export function Rules() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {rules && rules.rule_files.length > 0 ? (
+          {isLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-6 w-56" />
+            </div>
+          ) : rules && rules.rule_files.length > 0 ? (
             <div className="space-y-2">
               {rules.rule_files.map((file, i) => (
                 <div key={i} className="flex items-center gap-2">

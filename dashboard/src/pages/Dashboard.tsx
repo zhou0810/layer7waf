@@ -5,6 +5,8 @@ import { useHealth, useStats } from "@/hooks/use-api";
 import { StatsCard } from "@/components/StatsCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { TrafficChart } from "@/components/TrafficChart";
+import { Skeleton } from "@/components/Skeleton";
+import { ErrorAlert } from "@/components/ErrorAlert";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 interface TrafficPoint {
@@ -24,8 +26,8 @@ function formatUptime(secs: number): string {
 }
 
 export function Dashboard() {
-  const { data: health } = useHealth();
-  const { data: stats } = useStats();
+  const { data: health, isLoading: healthLoading, error: healthError, refetch: refetchHealth } = useHealth();
+  const { data: stats, isLoading: statsLoading, error: statsError, refetch: refetchStats } = useStats();
 
   const trafficRef = useRef<TrafficPoint[]>([]);
   const prevTotalRef = useRef<number | null>(null);
@@ -71,6 +73,8 @@ export function Dashboard() {
 
   const PIE_COLORS = ["oklch(0.488 0.243 264.376)", "oklch(0.645 0.246 16.439)"];
 
+  const hasError = healthError || statsError;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -78,34 +82,58 @@ export function Dashboard() {
           <h2 className="text-2xl font-bold">Dashboard</h2>
           <p className="text-muted-foreground text-sm">WAF overview and traffic monitoring</p>
         </div>
-        {health && <StatusBadge status={health.status} />}
+        {healthLoading ? (
+          <Skeleton className="h-6 w-20" />
+        ) : health ? (
+          <StatusBadge status={health.status} />
+        ) : null}
       </div>
 
+      {hasError && (
+        <ErrorAlert
+          message={(healthError || statsError)?.message ?? "Connection failed"}
+          onRetry={() => { refetchHealth(); refetchStats(); }}
+        />
+      )}
+
       {/* Stats cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard
-          title="Total Requests"
-          value={stats?.total_requests.toLocaleString() ?? "—"}
-          icon={Activity}
-        />
-        <StatsCard
-          title="Blocked Requests"
-          value={stats?.blocked_requests.toLocaleString() ?? "—"}
-          description={`${blockRate}% block rate`}
-          icon={ShieldAlert}
-        />
-        <StatsCard
-          title="Requests/sec"
-          value={stats?.requests_per_second.toFixed(1) ?? "—"}
-          icon={Gauge}
-        />
-        <StatsCard
-          title="Uptime"
-          value={stats ? formatUptime(stats.uptime_secs) : "—"}
-          description={health ? `v${health.version}` : undefined}
-          icon={Clock}
-        />
-      </div>
+      {statsLoading && !stats ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="p-6">
+                <Skeleton className="h-4 w-24 mb-3" />
+                <Skeleton className="h-8 w-20" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatsCard
+            title="Total Requests"
+            value={stats?.total_requests.toLocaleString() ?? "—"}
+            icon={Activity}
+          />
+          <StatsCard
+            title="Blocked Requests"
+            value={stats?.blocked_requests.toLocaleString() ?? "—"}
+            description={`${blockRate}% block rate`}
+            icon={ShieldAlert}
+          />
+          <StatsCard
+            title="Requests/sec"
+            value={stats?.requests_per_second.toFixed(1) ?? "—"}
+            icon={Gauge}
+          />
+          <StatsCard
+            title="Uptime"
+            value={stats ? formatUptime(stats.uptime_secs) : "—"}
+            description={health ? `v${health.version}` : undefined}
+            icon={Clock}
+          />
+        </div>
+      )}
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -144,6 +172,8 @@ export function Dashboard() {
                     />
                   </PieChart>
                 </ResponsiveContainer>
+              ) : statsLoading ? (
+                <Skeleton className="h-[180px] w-[180px] rounded-full" />
               ) : (
                 <p className="text-muted-foreground text-sm">No traffic data yet</p>
               )}

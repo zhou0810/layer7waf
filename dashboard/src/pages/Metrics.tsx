@@ -1,6 +1,8 @@
 import { useMetrics } from "@/hooks/use-api";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { ErrorAlert } from "@/components/ErrorAlert";
+import { Skeleton } from "@/components/Skeleton";
 import {
   BarChart,
   Bar,
@@ -118,7 +120,7 @@ function parsePrometheusText(text: string): {
 }
 
 export function Metrics() {
-  const { data: rawMetrics, isLoading } = useMetrics();
+  const { data: rawMetrics, isLoading, error, refetch } = useMetrics();
 
   const parsed = rawMetrics ? parsePrometheusText(rawMetrics) : null;
 
@@ -139,8 +141,21 @@ export function Metrics() {
         </p>
       </div>
 
+      {error && (
+        <ErrorAlert message={error.message} onRetry={() => refetch()} />
+      )}
+
       {isLoading ? (
-        <p className="text-muted-foreground">Loading metrics...</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="p-6">
+                <Skeleton className="h-4 w-32 mb-3" />
+                <Skeleton className="h-10 w-24" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       ) : (
         <Tabs defaultValue="cards">
           <TabsList>
