@@ -17,7 +17,7 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import { Trash2, Plus, FlaskConical, FileText } from "lucide-react";
+import { Trash2, Plus, FlaskConical, FileText, Loader2, CheckCircle2 } from "lucide-react";
 
 export function Rules() {
   const { data: rules, isLoading, error, refetch } = useRules();
@@ -30,19 +30,31 @@ export function Rules() {
   const [testMethod, setTestMethod] = useState("GET");
   const [testUri, setTestUri] = useState("/");
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [addSuccess, setAddSuccess] = useState(false);
 
-  function handleAddRule() {
-    if (!newRule.trim()) return;
-    addRule.mutate(newRule, {
-      onSuccess: () => setNewRule(""),
+  function handleAddRule(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const rule = newRule.trim();
+    if (!rule) return;
+    addRule.mutate(rule, {
+      onSuccess: () => {
+        setNewRule("");
+        setAddSuccess(true);
+        setTimeout(() => setAddSuccess(false), 2000);
+      },
     });
   }
 
-  function handleTestRule() {
-    if (!testRuleInput.trim()) return;
+  function handleTestRule(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const rule = testRuleInput.trim();
+    if (!rule) return;
+    setTestResult(null);
     testRule.mutate(
       {
-        rule: testRuleInput,
+        rule,
         request: {
           method: testMethod,
           uri: testUri,
@@ -162,21 +174,37 @@ export function Rules() {
           <Separator />
 
           {/* Add rule form */}
-          <div className="space-y-2">
-            <Label>Add Custom Rule</Label>
+          <div className="space-y-3">
+            <Label htmlFor="new-rule-input">Add Custom Rule</Label>
             <Textarea
+              id="new-rule-input"
               placeholder='SecRule ARGS "@contains test" "id:1000,phase:1,deny,status:403"'
               value={newRule}
               onChange={(e) => setNewRule(e.target.value)}
               rows={3}
               className="font-mono text-xs"
             />
-            <Button onClick={handleAddRule} disabled={addRule.isPending || !newRule.trim()}>
-              <Plus className="h-4 w-4 mr-1" />
-              Add Rule
-            </Button>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={handleAddRule}
+                disabled={addRule.isPending || !newRule.trim()}
+              >
+                {addRule.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4 mr-1" />
+                )}
+                {addRule.isPending ? "Adding..." : "Add Rule"}
+              </Button>
+              {addSuccess && (
+                <span className="flex items-center gap-1 text-sm text-emerald-400">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Rule added
+                </span>
+              )}
+            </div>
             {addRule.isError && (
-              <p className="text-sm text-destructive-foreground">{addRule.error.message}</p>
+              <p className="text-sm text-red-400">Error: {addRule.error.message}</p>
             )}
           </div>
         </CardContent>
@@ -192,8 +220,9 @@ export function Rules() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>Rule</Label>
+            <Label htmlFor="test-rule-input">Rule</Label>
             <Textarea
+              id="test-rule-input"
               placeholder='SecRule ARGS "@contains attack" "id:9999,phase:1,deny"'
               value={testRuleInput}
               onChange={(e) => setTestRuleInput(e.target.value)}
@@ -203,28 +232,45 @@ export function Rules() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Method</Label>
+              <Label htmlFor="test-method">Method</Label>
               <Input
+                id="test-method"
                 value={testMethod}
                 onChange={(e) => setTestMethod(e.target.value)}
                 placeholder="GET"
               />
             </div>
             <div className="space-y-2">
-              <Label>URI</Label>
+              <Label htmlFor="test-uri">URI</Label>
               <Input
+                id="test-uri"
                 value={testUri}
                 onChange={(e) => setTestUri(e.target.value)}
                 placeholder="/"
               />
             </div>
           </div>
-          <Button onClick={handleTestRule} disabled={testRule.isPending || !testRuleInput.trim()}>
-            <FlaskConical className="h-4 w-4 mr-1" />
-            Test Rule
+          <Button
+            onClick={handleTestRule}
+            disabled={testRule.isPending || !testRuleInput.trim()}
+          >
+            {testRule.isPending ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <FlaskConical className="h-4 w-4 mr-1" />
+            )}
+            {testRule.isPending ? "Testing..." : "Test Rule"}
           </Button>
           {testResult && (
-            <div className="rounded-md bg-muted p-3 font-mono text-xs">
+            <div
+              className={`rounded-md p-3 font-mono text-xs ${
+                testResult.startsWith("MATCHED")
+                  ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                  : testResult.startsWith("NOT MATCHED")
+                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                    : "bg-muted"
+              }`}
+            >
               {testResult}
             </div>
           )}
