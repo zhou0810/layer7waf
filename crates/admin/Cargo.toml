@@ -1,0 +1,19 @@
+[package]
+name = "layer7waf-admin"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+layer7waf-common = { workspace = true }
+layer7waf-coraza = { workspace = true }
+layer7waf-rate-limit = { workspace = true }
+layer7waf-ip-reputation = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+prometheus = { workspace = true }
+chrono = { workspace = true }
+tower-http = { workspace = true }

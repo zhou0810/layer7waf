@@ -1,0 +1,35 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# Go
+crates/coraza/go/libcoraza_bridge.*
+crates/coraza/go/*.h
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+*.pem
+*.key
+
+# Logs
+*.log
+/logs/
+
+# Docker
+docker/.env
+
+# Node (dashboard)
+dashboard/node_modules/
+dashboard/dist/

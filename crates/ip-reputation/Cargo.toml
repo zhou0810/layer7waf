@@ -1,0 +1,12 @@
+[package]
+name = "layer7waf-ip-reputation"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+layer7waf-common = { workspace = true }
+ipnet = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
+arc-swap = { workspace = true }
+tokio = { workspace = true }

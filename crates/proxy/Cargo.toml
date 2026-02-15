@@ -1,0 +1,33 @@
+[package]
+name = "layer7waf-proxy"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "layer7waf"
+path = "src/main.rs"
+
+[dependencies]
+layer7waf-common = { workspace = true }
+layer7waf-coraza = { workspace = true }
+layer7waf-rate-limit = { workspace = true }
+layer7waf-ip-reputation = { workspace = true }
+layer7waf-admin = { workspace = true }
+pingora = { workspace = true }
+pingora-core = { workspace = true }
+pingora-proxy = { workspace = true }
+pingora-http = { workspace = true }
+pingora-load-balancing = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+bytes = { workspace = true }
+http = { workspace = true }
+once_cell = { workspace = true }
+arc-swap = { workspace = true }
+prometheus = { workspace = true }
+async-trait = "0.1"
+glob = { workspace = true }

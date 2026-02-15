@@ -1,0 +1,104 @@
+use std::sync::{Arc, RwLock};
+
+use layer7waf_common::AppConfig;
+use prometheus::{HistogramOpts, HistogramVec, IntCounter, IntCounterVec, Opts, Registry};
+use serde::{Deserialize, Serialize};
+
+/// Shared state type alias used across all route handlers.
+pub type SharedState = Arc<AppState>;
+
+/// Central application state holding configuration, metrics, and audit logs.
+pub struct AppState {
+    pub config: RwLock<AppConfig>,
+    pub metrics: WafMetrics,
+    pub audit_log: RwLock<Vec<AuditLogEntry>>,
+    pub custom_rules: RwLock<Vec<String>>,
+    pub start_time: std::time::Instant,
+}
+
+/// Prometheus metrics collected by the WAF.
+pub struct WafMetrics {
+    pub registry: Registry,
+    pub requests_total: IntCounter,
+    pub requests_blocked: IntCounter,
+    pub request_duration: HistogramVec,
+    pub rule_hits: IntCounterVec,
+    pub rate_limited_total: IntCounter,
+}
+
+/// A single audit log entry representing a processed request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditLogEntry {
+    pub id: String,
+    pub timestamp: String,
+    pub client_ip: String,
+    pub method: String,
+    pub uri: String,
+    pub rule_id: Option<String>,
+    pub action: String,
+    pub status: u16,
+}
+
+impl WafMetrics {
+    /// Create a new WafMetrics instance with all counters and histograms
+    /// registered against a fresh Prometheus registry.
+    pub fn new() -> Self {
+        let registry = Registry::new();
+
+        let requests_total = IntCounter::with_opts(
+            Opts::new("waf_requests_total", "Total number of requests processed"),
+        )
+        .expect("failed to create requests_total counter");
+
+        let requests_blocked = IntCounter::with_opts(
+            Opts::new("waf_requests_blocked", "Total number of requests blocked by WAF rules"),
+        )
+        .expect("failed to create requests_blocked counter");
+
+        let request_duration = HistogramVec::new(
+            HistogramOpts::new("waf_request_duration_seconds", "Request processing duration in seconds")
+                .buckets(vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 5.0]),
+            &["method", "status"],
+        )
+        .expect("failed to create request_duration histogram");
+
+        let rule_hits = IntCounterVec::new(
+            Opts::new("waf_rule_hits_total", "Number of times each WAF rule was triggered"),
+            &["rule_id"],
+        )
+        .expect("failed to create rule_hits counter");
+
+        let rate_limited_total = IntCounter::with_opts(
+            Opts::new("waf_rate_limited_total", "Total number of requests rate-limited"),
+        )
+        .expect("failed to create rate_limited_total counter");
+
+        registry.register(Box::new(requests_total.clone())).expect("failed to register requests_total");
+        registry.register(Box::new(requests_blocked.clone())).expect("failed to register requests_blocked");
+        registry.register(Box::new(request_duration.clone())).expect("failed to register request_duration");
+        registry.register(Box::new(rule_hits.clone())).expect("failed to register rule_hits");
+        registry.register(Box::new(rate_limited_total.clone())).expect("failed to register rate_limited_total");
+
+        Self {
+            registry,
+            requests_total,
+            requests_blocked,
+            request_duration,
+            rule_hits,
+            rate_limited_total,
+        }
+    }
+}
+
+impl AppState {
+    /// Create a new AppState from the given configuration.
+    pub fn new(config: AppConfig) -> Self {
+        Self {
+            config: RwLock::new(config),
+            metrics: WafMetrics::new(),
+            audit_log: RwLock::new(Vec::new()),
+            custom_rules: RwLock::new(Vec::new()),
+            start_time: std::time::Instant::now(),
+        }
+    }
+}

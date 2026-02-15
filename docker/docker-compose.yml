@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  waf:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    volumes:
+      - ../config/layer7waf.yaml:/etc/layer7waf/layer7waf.yaml:ro
+      - ../rules:/etc/layer7waf/rules:ro
+    depends_on:
+      - upstream
+    networks:
+      - wafnet
+
+  upstream:
+    image: nginx:alpine
+    expose:
+      - "80"
+    volumes:
+      - ./nginx-upstream.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - wafnet
+
+networks:
+  wafnet:
+    driver: bridge

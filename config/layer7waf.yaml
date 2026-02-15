@@ -1,0 +1,42 @@
+server:
+  listen:
+    - "0.0.0.0:8080"
+  # tls:
+  #   cert: "/etc/layer7waf/certs/cert.pem"
+  #   key: "/etc/layer7waf/certs/key.pem"
+  admin:
+    listen: "127.0.0.1:9090"
+    dashboard: true
+
+upstreams:
+  - name: backend
+    servers:
+      - addr: "127.0.0.1:8000"
+        weight: 1
+    health_check:
+      interval_secs: 10
+      path: "/health"
+
+routes:
+  - host: null
+    path_prefix: "/"
+    upstream: backend
+    waf:
+      enabled: true
+      mode: block
+
+waf:
+  rules: []
+  request_body_limit: 13107200
+  audit_log:
+    enabled: true
+    path: "/var/log/layer7waf/audit.log"
+
+rate_limit:
+  enabled: true
+  default_rps: 100
+  default_burst: 200
+
+ip_reputation:
+  blocklist: null
+  allowlist: null
