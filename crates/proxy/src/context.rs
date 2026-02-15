@@ -26,6 +26,9 @@ pub struct RequestContext {
 
     /// Response status code (set during response phase).
     pub response_status: u16,
+
+    /// Bot detection score (set during request phase).
+    pub bot_score: Option<f64>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,6 +36,7 @@ pub enum BlockReason {
     Waf { status: u16 },
     RateLimit,
     IpBlocked,
+    BotDetected { score: f64 },
 }
 
 impl RequestContext {
@@ -46,6 +50,7 @@ impl RequestContext {
             method: String::new(),
             uri: String::new(),
             response_status: 0,
+            bot_score: None,
         }
     }
 }

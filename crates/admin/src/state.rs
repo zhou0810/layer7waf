@@ -24,6 +24,9 @@ pub struct WafMetrics {
     pub request_duration: HistogramVec,
     pub rule_hits: IntCounterVec,
     pub rate_limited_total: IntCounter,
+    pub bots_detected: IntCounter,
+    pub challenges_issued: IntCounter,
+    pub challenges_solved: IntCounter,
 }
 
 /// A single audit log entry representing a processed request.
@@ -73,11 +76,29 @@ impl WafMetrics {
         )
         .expect("failed to create rate_limited_total counter");
 
+        let bots_detected = IntCounter::with_opts(
+            Opts::new("waf_bots_detected", "Total number of bots detected"),
+        )
+        .expect("failed to create bots_detected counter");
+
+        let challenges_issued = IntCounter::with_opts(
+            Opts::new("waf_challenges_issued", "Total number of JS challenges issued"),
+        )
+        .expect("failed to create challenges_issued counter");
+
+        let challenges_solved = IntCounter::with_opts(
+            Opts::new("waf_challenges_solved", "Total number of JS challenges solved"),
+        )
+        .expect("failed to create challenges_solved counter");
+
         registry.register(Box::new(requests_total.clone())).expect("failed to register requests_total");
         registry.register(Box::new(requests_blocked.clone())).expect("failed to register requests_blocked");
         registry.register(Box::new(request_duration.clone())).expect("failed to register request_duration");
         registry.register(Box::new(rule_hits.clone())).expect("failed to register rule_hits");
         registry.register(Box::new(rate_limited_total.clone())).expect("failed to register rate_limited_total");
+        registry.register(Box::new(bots_detected.clone())).expect("failed to register bots_detected");
+        registry.register(Box::new(challenges_issued.clone())).expect("failed to register challenges_issued");
+        registry.register(Box::new(challenges_solved.clone())).expect("failed to register challenges_solved");
 
         Self {
             registry,
@@ -86,6 +107,9 @@ impl WafMetrics {
             request_duration,
             rule_hits,
             rate_limited_total,
+            bots_detected,
+            challenges_issued,
+            challenges_solved,
         }
     }
 }

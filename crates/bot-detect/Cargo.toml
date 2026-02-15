@@ -1,0 +1,14 @@
+[package]
+name = "layer7waf-bot-detect"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+layer7waf-common = { workspace = true }
+sha2 = { workspace = true }
+hmac = { workspace = true }
+hex = { workspace = true }
+rand = { workspace = true }
+dashmap = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }

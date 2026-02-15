@@ -7,6 +7,7 @@ export interface AppConfig {
   waf: WafConfig;
   rate_limit: RateLimitConfig;
   ip_reputation: IpReputationConfig;
+  bot_detection: BotDetectionConfig;
 }
 
 export interface ServerConfig {
@@ -80,6 +81,28 @@ export interface RateLimitConfig {
 export interface IpReputationConfig {
   blocklist?: string | null;
   allowlist?: string | null;
+}
+
+export interface BotDetectionConfig {
+  enabled: boolean;
+  mode: "block" | "challenge" | "detect";
+  js_challenge: JsChallengeConfig;
+  score_threshold: number;
+  known_bots_allowlist: string[];
+}
+
+export interface JsChallengeConfig {
+  enabled: boolean;
+  difficulty: number;
+  ttl_secs: number;
+  secret: string;
+}
+
+export interface BotStatsResponse {
+  bots_detected: number;
+  challenges_issued: number;
+  challenges_solved: number;
+  challenge_pass_rate: number;
 }
 
 // API response types
@@ -191,6 +214,8 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     }),
+
+  getBotStats: () => fetchJSON<BotStatsResponse>(`${BASE}/bot-stats`),
 
   getLogs: (params?: { limit?: number; offset?: number; ip?: string; rule_id?: string }) => {
     const searchParams = new URLSearchParams();

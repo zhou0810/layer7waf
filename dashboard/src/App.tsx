@@ -6,6 +6,7 @@ import { Logs } from "@/pages/Logs";
 import { Rules } from "@/pages/Rules";
 import { Config } from "@/pages/Config";
 import { Metrics } from "@/pages/Metrics";
+import { BotDetection } from "@/pages/BotDetection";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,6 +26,7 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/logs" element={<Logs />} />
             <Route path="/rules" element={<Rules />} />
+            <Route path="/bots" element={<BotDetection />} />
             <Route path="/config" element={<Config />} />
             <Route path="/metrics" element={<Metrics />} />
           </Route>

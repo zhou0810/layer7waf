@@ -5,6 +5,7 @@ import {
   Shield,
   Settings,
   BarChart3,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
@@ -13,6 +14,7 @@ const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/logs", icon: ScrollText, label: "Audit Logs" },
   { to: "/rules", icon: Shield, label: "WAF Rules" },
+  { to: "/bots", icon: Bot, label: "Bot Detection" },
   { to: "/config", icon: Settings, label: "Configuration" },
   { to: "/metrics", icon: BarChart3, label: "Metrics" },
 ];

@@ -8,6 +8,9 @@ const startTime = Date.now();
 let totalRequests = 147523;
 let blockedRequests = 3891;
 let rateLimitedRequests = 421;
+let botsDetected = 234;
+let challengesIssued = 512;
+let challengesSolved = 389;
 let customRules = [
   'SecRule ARGS "@contains <script>" "id:1001,phase:1,deny,status:403,msg:XSS attempt"',
   'SecRule REQUEST_URI "@rx /etc/passwd" "id:1002,phase:1,deny,status:403,msg:Path traversal"',
@@ -52,6 +55,18 @@ const config = {
   },
   rate_limit: { enabled: true, default_rps: 100, default_burst: 200 },
   ip_reputation: { blocklist: "rules/blocklist.txt", allowlist: null },
+  bot_detection: {
+    enabled: true,
+    mode: "challenge",
+    js_challenge: {
+      enabled: true,
+      difficulty: 16,
+      ttl_secs: 3600,
+      secret: "mock-secret-key",
+    },
+    score_threshold: 0.7,
+    known_bots_allowlist: ["Googlebot", "Bingbot"],
+  },
 };
 
 const actions = ["allowed", "blocked", "rate_limited", "allowed", "allowed", "allowed", "allowed", "allowed"];
@@ -155,6 +170,11 @@ setInterval(() => {
   totalRequests += inc;
   if (Math.random() < 0.08) blockedRequests += Math.floor(Math.random() * 3) + 1;
   if (Math.random() < 0.03) rateLimitedRequests += 1;
+  if (Math.random() < 0.05) {
+    botsDetected += Math.floor(Math.random() * 2) + 1;
+    challengesIssued += Math.floor(Math.random() * 3) + 1;
+    challengesSolved += Math.floor(Math.random() * 2);
+  }
 }, 1000);
 
 const server = createServer((req, res) => {
@@ -248,6 +268,14 @@ const server = createServer((req, res) => {
     } else {
       json({ status: "error", message: `rule with id ${id} not found` }, 404);
     }
+  } else if (path === "/api/bot-stats" && req.method === "GET") {
+    const passRate = challengesIssued > 0 ? challengesSolved / challengesIssued : 0;
+    json({
+      bots_detected: botsDetected,
+      challenges_issued: challengesIssued,
+      challenges_solved: challengesSolved,
+      challenge_pass_rate: Math.round(passRate * 1000) / 1000,
+    });
   } else if (path === "/api/logs" && req.method === "GET") {
     const limit = parseInt(url.searchParams.get("limit") || "100", 10);
     const offset = parseInt(url.searchParams.get("offset") || "0", 10);

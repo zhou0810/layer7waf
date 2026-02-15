@@ -75,6 +75,14 @@ export function useTestRule() {
   });
 }
 
+export function useBotStats() {
+  return useQuery({
+    queryKey: ["bot-stats"],
+    queryFn: api.getBotStats,
+    refetchInterval: 5000,
+  });
+}
+
 export function useLogs(params?: {
   limit?: number;
   offset?: number;

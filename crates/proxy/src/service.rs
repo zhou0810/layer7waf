@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use bytes::Bytes;
 use http::StatusCode;
+use layer7waf_bot_detect::{BotCheckResult, BotDetector};
 use layer7waf_common::{AppConfig, WafMode};
 use layer7waf_coraza::{WafAction, WafEngine, WafTransaction};
 use layer7waf_ip_reputation::IpReputation;
@@ -22,6 +23,7 @@ pub struct Layer7WafProxy {
     pub upstreams: Vec<UpstreamSelector>,
     pub rate_limiter: Option<Arc<RateLimiter>>,
     pub ip_reputation: Arc<IpReputation>,
+    pub bot_detector: Option<Arc<BotDetector>>,
     pub metrics: Arc<ProxyMetrics>,
 }
 
@@ -32,6 +34,9 @@ pub struct ProxyMetrics {
     pub requests_rate_limited: IntCounter,
     pub request_duration: HistogramVec,
     pub rule_hits: IntCounterVec,
+    pub bots_detected: IntCounter,
+    pub challenges_issued: IntCounter,
+    pub challenges_solved: IntCounter,
 }
 
 impl ProxyMetrics {
@@ -63,6 +68,13 @@ impl ProxyMetrics {
         )
         .unwrap();
 
+        let bots_detected =
+            IntCounter::new("layer7waf_bots_detected", "Total bots detected").unwrap();
+        let challenges_issued =
+            IntCounter::new("layer7waf_challenges_issued", "Total JS challenges issued").unwrap();
+        let challenges_solved =
+            IntCounter::new("layer7waf_challenges_solved", "Total JS challenges solved").unwrap();
+
         registry.register(Box::new(requests_total.clone())).unwrap();
         registry
             .register(Box::new(requests_blocked.clone()))
@@ -74,6 +86,13 @@ impl ProxyMetrics {
             .register(Box::new(request_duration.clone()))
             .unwrap();
         registry.register(Box::new(rule_hits.clone())).unwrap();
+        registry.register(Box::new(bots_detected.clone())).unwrap();
+        registry
+            .register(Box::new(challenges_issued.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(challenges_solved.clone()))
+            .unwrap();
 
         Self {
             registry,
@@ -82,6 +101,9 @@ impl ProxyMetrics {
             requests_rate_limited,
             request_duration,
             rule_hits,
+            bots_detected,
+            challenges_issued,
+            challenges_solved,
         }
     }
 }
@@ -145,6 +167,18 @@ impl Layer7WafProxy {
             }
         }
 
+        // Initialize bot detector
+        let bot_detector = if config.bot_detection.enabled {
+            info!(
+                mode = ?config.bot_detection.mode,
+                threshold = config.bot_detection.score_threshold,
+                "bot detection enabled"
+            );
+            Some(Arc::new(BotDetector::new(config.bot_detection.clone())))
+        } else {
+            None
+        };
+
         let metrics = Arc::new(ProxyMetrics::new());
 
         Self {
@@ -153,6 +187,7 @@ impl Layer7WafProxy {
             upstreams,
             rate_limiter,
             ip_reputation,
+            bot_detector,
             metrics,
         }
     }
@@ -278,6 +313,90 @@ impl ProxyHttp for Layer7WafProxy {
                     .write_response_body(Some(Bytes::from("Rate limit exceeded\n")), true)
                     .await?;
                 return Ok(true);
+            }
+        }
+
+        // 2.5 Bot detection
+        if let Some(ref detector) = self.bot_detector {
+            let headers: Vec<(String, String)> = session
+                .req_header()
+                .headers
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        k.as_str().to_string(),
+                        v.to_str().unwrap_or("").to_string(),
+                    )
+                })
+                .collect();
+
+            let cookie_header = session
+                .req_header()
+                .headers
+                .get("cookie")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string());
+
+            let result = detector.check(
+                &ctx.client_ip,
+                &headers,
+                &ctx.method,
+                cookie_header.as_deref(),
+            );
+
+            match result {
+                BotCheckResult::Block => {
+                    info!(client_ip = %ctx.client_ip, "request blocked by bot detection");
+                    ctx.block_reason = Some(BlockReason::BotDetected { score: 1.0 });
+                    self.metrics.bots_detected.inc();
+                    self.metrics.requests_blocked.inc();
+                    let mut resp =
+                        ResponseHeader::build(StatusCode::FORBIDDEN, Some(4)).unwrap();
+                    resp.insert_header("content-type", "text/plain").unwrap();
+                    session.set_keepalive(None);
+                    session
+                        .write_response_header(Box::new(resp), false)
+                        .await?;
+                    session
+                        .write_response_body(Some(Bytes::from("Forbidden: Bot detected\n")), true)
+                        .await?;
+                    return Ok(true);
+                }
+                BotCheckResult::Challenge(html) => {
+                    info!(client_ip = %ctx.client_ip, "issuing JS challenge for bot detection");
+                    self.metrics.challenges_issued.inc();
+                    let body_bytes = Bytes::from(html);
+                    let mut resp =
+                        ResponseHeader::build(StatusCode::OK, Some(4)).unwrap();
+                    resp.insert_header("content-type", "text/html; charset=utf-8")
+                        .unwrap();
+                    resp.insert_header("cache-control", "no-store").unwrap();
+                    session.set_keepalive(None);
+                    session
+                        .write_response_header(Box::new(resp), false)
+                        .await?;
+                    session
+                        .write_response_body(Some(body_bytes), true)
+                        .await?;
+                    return Ok(true);
+                }
+                BotCheckResult::Detect { score } => {
+                    ctx.bot_score = Some(score);
+                    if score >= 0.7 {
+                        self.metrics.bots_detected.inc();
+                    }
+                    debug!(client_ip = %ctx.client_ip, score, "bot detection score (detect mode)");
+                }
+                BotCheckResult::Allow => {
+                    // Check if this was a solved challenge (cookie present means solved)
+                    if cookie_header
+                        .as_deref()
+                        .map(|c| c.contains("__l7w_bc="))
+                        .unwrap_or(false)
+                    {
+                        self.metrics.challenges_solved.inc();
+                    }
+                }
             }
         }
 

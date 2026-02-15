@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Select } from "@/components/ui/select";
 import { Save, RotateCcw } from "lucide-react";
 
 export function Config() {
@@ -335,6 +336,114 @@ export function Config() {
                     }
                     placeholder="Not set"
                   />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Bot Detection */}
+            <Card>
+              <CardHeader><CardTitle className="text-base">Bot Detection</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={draft.bot_detection?.enabled ?? false}
+                    onCheckedChange={(v) =>
+                      setDraft({
+                        ...draft,
+                        bot_detection: {
+                          ...draft.bot_detection,
+                          enabled: v,
+                          mode: draft.bot_detection?.mode ?? "challenge",
+                          js_challenge: draft.bot_detection?.js_challenge ?? {
+                            enabled: true,
+                            difficulty: 16,
+                            ttl_secs: 3600,
+                            secret: "",
+                          },
+                          score_threshold: draft.bot_detection?.score_threshold ?? 0.7,
+                          known_bots_allowlist: draft.bot_detection?.known_bots_allowlist ?? [],
+                        },
+                      })
+                    }
+                  />
+                  <Label>Enabled</Label>
+                </div>
+                <div className="space-y-1">
+                  <Label>Mode</Label>
+                  <Select
+                    value={draft.bot_detection?.mode ?? "challenge"}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        bot_detection: {
+                          ...draft.bot_detection!,
+                          mode: e.target.value as "block" | "challenge" | "detect",
+                        },
+                      })
+                    }
+                  >
+                    <option value="block">Block</option>
+                    <option value="challenge">Challenge</option>
+                    <option value="detect">Detect</option>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Score Threshold (0.0-1.0)</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="1"
+                    value={draft.bot_detection?.score_threshold ?? 0.7}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        bot_detection: {
+                          ...draft.bot_detection!,
+                          score_threshold: parseFloat(e.target.value) || 0.7,
+                        },
+                      })
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>JS Challenge Difficulty (bits)</Label>
+                  <Input
+                    type="number"
+                    value={draft.bot_detection?.js_challenge?.difficulty ?? 16}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        bot_detection: {
+                          ...draft.bot_detection!,
+                          js_challenge: {
+                            ...draft.bot_detection!.js_challenge,
+                            difficulty: parseInt(e.target.value, 10) || 16,
+                          },
+                        },
+                      })
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Known Bots Allowlist</Label>
+                  <Input
+                    value={(draft.bot_detection?.known_bots_allowlist ?? []).join(", ")}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        bot_detection: {
+                          ...draft.bot_detection!,
+                          known_bots_allowlist: e.target.value
+                            .split(",")
+                            .map((s) => s.trim())
+                            .filter(Boolean),
+                        },
+                      })
+                    }
+                    placeholder="Googlebot, Bingbot"
+                  />
+                  <p className="text-xs text-muted-foreground">Comma-separated bot names to allow</p>
                 </div>
               </CardContent>
             </Card>

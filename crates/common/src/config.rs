@@ -12,6 +12,8 @@ pub struct AppConfig {
     pub rate_limit: RateLimitConfig,
     #[serde(default)]
     pub ip_reputation: IpReputationConfig,
+    #[serde(default)]
+    pub bot_detection: BotDetectionConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -186,6 +188,63 @@ impl Default for IpReputationConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BotDetectionConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_bot_detection_mode")]
+    pub mode: BotDetectionMode,
+    #[serde(default)]
+    pub js_challenge: JsChallengeConfig,
+    #[serde(default = "default_score_threshold")]
+    pub score_threshold: f64,
+    #[serde(default)]
+    pub known_bots_allowlist: Vec<String>,
+}
+
+impl Default for BotDetectionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            mode: BotDetectionMode::Challenge,
+            js_challenge: JsChallengeConfig::default(),
+            score_threshold: default_score_threshold(),
+            known_bots_allowlist: vec![],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BotDetectionMode {
+    Block,
+    Challenge,
+    Detect,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsChallengeConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_challenge_difficulty")]
+    pub difficulty: u32,
+    #[serde(default = "default_challenge_ttl")]
+    pub ttl_secs: u64,
+    #[serde(default = "default_challenge_secret")]
+    pub secret: String,
+}
+
+impl Default for JsChallengeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            difficulty: default_challenge_difficulty(),
+            ttl_secs: default_challenge_ttl(),
+            secret: default_challenge_secret(),
+        }
+    }
+}
+
 // Default value helpers
 fn default_admin_listen() -> String {
     "127.0.0.1:9090".to_string()
@@ -222,6 +281,26 @@ fn default_rps() -> u64 {
 }
 fn default_burst() -> u64 {
     200
+}
+fn default_bot_detection_mode() -> BotDetectionMode {
+    BotDetectionMode::Challenge
+}
+fn default_score_threshold() -> f64 {
+    0.7
+}
+fn default_challenge_difficulty() -> u32 {
+    16
+}
+fn default_challenge_ttl() -> u64 {
+    3600
+}
+fn default_challenge_secret() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("l7w-{:x}", ts)
 }
 
 impl AppConfig {
