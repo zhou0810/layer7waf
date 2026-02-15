@@ -16,6 +16,8 @@ pub struct AppConfig {
     pub bot_detection: BotDetectionConfig,
     #[serde(default)]
     pub anti_scraping: AntiScrapingConfig,
+    #[serde(default)]
+    pub geoip: GeoIpConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -333,6 +335,49 @@ impl Default for ObfuscationConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeoIpConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub database_path: Option<PathBuf>,
+    #[serde(default)]
+    pub blocked_countries: Vec<String>,
+    #[serde(default)]
+    pub allowed_countries: Vec<String>,
+    #[serde(default = "default_geoip_mode")]
+    pub mode: GeoIpMode,
+    #[serde(default = "default_geoip_default_action")]
+    pub default_action: GeoIpDefaultAction,
+}
+
+impl Default for GeoIpConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            database_path: None,
+            blocked_countries: vec![],
+            allowed_countries: vec![],
+            mode: GeoIpMode::Block,
+            default_action: GeoIpDefaultAction::Allow,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GeoIpMode {
+    Block,
+    Detect,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GeoIpDefaultAction {
+    Allow,
+    Block,
+}
+
 // Default value helpers
 fn default_admin_listen() -> String {
     "127.0.0.1:9090".to_string()
@@ -393,6 +438,12 @@ fn default_captcha_ttl() -> u64 {
 }
 fn default_trap_path_prefix() -> String {
     "/.well-known/l7w-trap".to_string()
+}
+fn default_geoip_mode() -> GeoIpMode {
+    GeoIpMode::Block
+}
+fn default_geoip_default_action() -> GeoIpDefaultAction {
+    GeoIpDefaultAction::Allow
 }
 fn default_challenge_secret() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};

@@ -16,6 +16,8 @@ let trapsTriggered = 42;
 let captchasIssued = 156;
 let captchasSolved = 98;
 let responsesObfuscated = 3421;
+let geoipBlocked = 156;
+let geoipLookups = 14832;
 let customRules = [
   'SecRule ARGS "@contains <script>" "id:1001,phase:1,deny,status:403,msg:XSS attempt"',
   'SecRule REQUEST_URI "@rx /etc/passwd" "id:1002,phase:1,deny,status:403,msg:Path traversal"',
@@ -189,6 +191,10 @@ setInterval(() => {
   if (Math.random() < 0.1) {
     responsesObfuscated += Math.floor(Math.random() * 10) + 1;
   }
+  geoipLookups += inc;
+  if (Math.random() < 0.03) {
+    geoipBlocked += Math.floor(Math.random() * 2) + 1;
+  }
 }, 1000);
 
 const server = createServer((req, res) => {
@@ -299,6 +305,14 @@ const server = createServer((req, res) => {
       captchas_solved: captchasSolved,
       responses_obfuscated: responsesObfuscated,
       captcha_pass_rate: Math.round(passRate * 1000) / 1000,
+    });
+  } else if (path === "/api/geoip-stats" && req.method === "GET") {
+    json({
+      geoip_blocked: geoipBlocked,
+      geoip_lookups: geoipLookups,
+      enabled: true,
+      blocked_countries: ["CN", "RU", "KP"],
+      allowed_countries: [],
     });
   } else if (path === "/api/logs" && req.method === "GET") {
     const limit = parseInt(url.searchParams.get("limit") || "100", 10);

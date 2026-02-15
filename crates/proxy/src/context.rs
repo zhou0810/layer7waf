@@ -36,6 +36,9 @@ pub struct RequestContext {
     /// Whether the request hit a honeypot trap.
     pub is_trap_request: bool,
 
+    /// GeoIP country code (set during request phase).
+    pub geo_country: Option<String>,
+
     /// Whether the response body should be processed for honeypot/obfuscation injection.
     pub should_process_response: bool,
 
@@ -54,6 +57,7 @@ pub enum BlockReason {
     BotDetected { score: f64 },
     ScraperDetected { score: f64 },
     HoneypotTriggered,
+    GeoBlocked { country: String },
 }
 
 impl RequestContext {
@@ -69,6 +73,7 @@ impl RequestContext {
             response_status: 0,
             bot_score: None,
             scraping_score: None,
+            geo_country: None,
             is_trap_request: false,
             should_process_response: false,
             response_content_type: None,

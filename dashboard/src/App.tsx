@@ -8,6 +8,7 @@ import { Config } from "@/pages/Config";
 import { Metrics } from "@/pages/Metrics";
 import { BotDetection } from "@/pages/BotDetection";
 import { AntiScraping } from "@/pages/AntiScraping";
+import { GeoIp } from "@/pages/GeoIp";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,6 +30,7 @@ export default function App() {
             <Route path="/rules" element={<Rules />} />
             <Route path="/bots" element={<BotDetection />} />
             <Route path="/anti-scraping" element={<AntiScraping />} />
+            <Route path="/geoip" element={<GeoIp />} />
             <Route path="/config" element={<Config />} />
             <Route path="/metrics" element={<Metrics />} />
           </Route>

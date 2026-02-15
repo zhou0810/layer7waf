@@ -41,6 +41,14 @@ ip_reputation:
   blocklist: null
   allowlist: null
 
+# geoip:
+#   enabled: false
+#   database_path: "/path/to/GeoLite2-Country.mmdb"
+#   blocked_countries: ["CN", "RU"]   # ISO 3166-1 alpha-2 codes
+#   allowed_countries: []              # if set, only these countries are allowed
+#   mode: block                        # block | detect
+#   default_action: allow              # allow | block (when country unknown)
+
 # anti_scraping:
 #   enabled: false
 #   mode: detect                    # block | challenge | detect

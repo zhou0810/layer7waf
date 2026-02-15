@@ -32,6 +32,8 @@ pub struct WafMetrics {
     pub captchas_issued: IntCounter,
     pub captchas_solved: IntCounter,
     pub responses_obfuscated: IntCounter,
+    pub geoip_blocked: IntCounter,
+    pub geoip_lookups: IntCounter,
 }
 
 /// A single audit log entry representing a processed request.
@@ -121,6 +123,16 @@ impl WafMetrics {
         )
         .expect("failed to create responses_obfuscated counter");
 
+        let geoip_blocked = IntCounter::with_opts(
+            Opts::new("waf_geoip_blocked", "Total number of requests blocked by GeoIP"),
+        )
+        .expect("failed to create geoip_blocked counter");
+
+        let geoip_lookups = IntCounter::with_opts(
+            Opts::new("waf_geoip_lookups", "Total number of GeoIP lookups performed"),
+        )
+        .expect("failed to create geoip_lookups counter");
+
         registry.register(Box::new(requests_total.clone())).expect("failed to register requests_total");
         registry.register(Box::new(requests_blocked.clone())).expect("failed to register requests_blocked");
         registry.register(Box::new(request_duration.clone())).expect("failed to register request_duration");
@@ -134,6 +146,8 @@ impl WafMetrics {
         registry.register(Box::new(captchas_issued.clone())).expect("failed to register captchas_issued");
         registry.register(Box::new(captchas_solved.clone())).expect("failed to register captchas_solved");
         registry.register(Box::new(responses_obfuscated.clone())).expect("failed to register responses_obfuscated");
+        registry.register(Box::new(geoip_blocked.clone())).expect("failed to register geoip_blocked");
+        registry.register(Box::new(geoip_lookups.clone())).expect("failed to register geoip_lookups");
 
         Self {
             registry,
@@ -150,6 +164,8 @@ impl WafMetrics {
             captchas_issued,
             captchas_solved,
             responses_obfuscated,
+            geoip_blocked,
+            geoip_lookups,
         }
     }
 }

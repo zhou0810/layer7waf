@@ -9,6 +9,7 @@ members = [
     "crates/common",
     "crates/bot-detect",
     "crates/anti-scraping",
+    "crates/geoip",
 ]
 
 [workspace.dependencies]
@@ -58,6 +59,7 @@ bytes = "1"
 http = "1"
 once_cell = "1"
 arc-swap = "1"
+maxminddb = { version = "0.24", features = ["mmap"] }
 glob = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
@@ -71,3 +73,4 @@ layer7waf-ip-reputation = { path = "crates/ip-reputation" }
 layer7waf-admin = { path = "crates/admin" }
 layer7waf-bot-detect = { path = "crates/bot-detect" }
 layer7waf-anti-scraping = { path = "crates/anti-scraping" }
+layer7waf-geoip = { path = "crates/geoip" }

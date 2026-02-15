@@ -114,6 +114,14 @@ export interface ScrapingStatsResponse {
   captcha_pass_rate: number;
 }
 
+export interface GeoIpStatsResponse {
+  geoip_blocked: number;
+  geoip_lookups: number;
+  enabled: boolean;
+  blocked_countries: string[];
+  allowed_countries: string[];
+}
+
 // API response types
 
 export interface HealthResponse {
@@ -227,6 +235,8 @@ export const api = {
   getBotStats: () => fetchJSON<BotStatsResponse>(`${BASE}/bot-stats`),
 
   getScrapingStats: () => fetchJSON<ScrapingStatsResponse>(`${BASE}/scraping-stats`),
+
+  getGeoIpStats: () => fetchJSON<GeoIpStatsResponse>(`${BASE}/geoip-stats`),
 
   getLogs: (params?: { limit?: number; offset?: number; ip?: string; rule_id?: string }) => {
     const searchParams = new URLSearchParams();

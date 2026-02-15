@@ -1,5 +1,6 @@
 pub mod bot_stats;
 pub mod config;
+pub mod geoip_stats;
 pub mod health;
 pub mod logs;
 pub mod metrics;

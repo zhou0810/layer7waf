@@ -49,6 +49,8 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/api/bot-stats", get(routes::bot_stats::get_bot_stats))
         // Anti-scraping statistics
         .route("/api/scraping-stats", get(routes::scraping_stats::get_scraping_stats))
+        // GeoIP statistics
+        .route("/api/geoip-stats", get(routes::geoip_stats::get_geoip_stats))
         // Attach shared state and middleware
         .with_state(state)
         .layer(cors);

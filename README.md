@@ -19,6 +19,10 @@ A high-performance Layer 7 Web Application Firewall built with [Pingora](https:/
                     │  │ Limiter  │  │ Reputa-  │  │ (Fingerprint, │   │
                     │  │          │  │ tion     │  │  JS Challenge)│   │
                     │  └──────────┘  └──────────┘  └───────────────┘   │
+                    │  ┌──────────┐                                    │
+                    │  │ GeoIP    │                                    │
+                    │  │ Filter   │                                    │
+                    │  └──────────┘                                    │
                     └──────────────────┬────────────────────────────────┘
                                        │
                                        ▼
@@ -28,7 +32,7 @@ A high-performance Layer 7 Web Application Firewall built with [Pingora](https:/
 ### Request Lifecycle
 
 ```
-1. request_filter()   → IP check → Rate limit → Bot detection → Anti-scraping → Coraza WAF
+1. request_filter()   → IP check → GeoIP → Rate limit → Bot detection → Anti-scraping → Coraza WAF
 2. upstream_peer()    → Select upstream (weighted round-robin)
 3. response_filter()  → Coraza response headers/body check
 4. logging()          → Structured JSON log, Prometheus metrics
@@ -41,6 +45,7 @@ A high-performance Layer 7 Web Application Firewall built with [Pingora](https:/
 - **IP Reputation**: CIDR prefix trie for fast blocklist/allowlist lookups with hot-reload
 - **Bot Detection**: HTTP fingerprinting, User-Agent classification, JS proof-of-work challenges
 - **Anti-Scraping**: Math CAPTCHA challenges, content honeypot traps, zero-width character watermarking
+- **GeoIP Filtering**: Country-based blocking/detection using MaxMind GeoLite2 databases with hot-reload
 - **Reverse Proxy**: Weighted round-robin upstream selection via Pingora
 - **Admin REST API**: Health, metrics, config, rules management, audit logs, bot stats
 - **Web Dashboard**: React/TypeScript UI for monitoring, configuration, and bot analytics
@@ -57,6 +62,7 @@ layer7waf/
 │   ├── ip-reputation/  # CIDR prefix trie for IP blocklist/allowlist
 │   ├── bot-detect/     # Bot detection: fingerprinting, JS challenges, scoring
 │   ├── anti-scraping/  # Anti-scraping: CAPTCHA, honeypots, obfuscation
+│   ├── geoip/          # GeoIP country-based filtering (MaxMind mmdb)
 │   ├── admin/          # Axum REST API server
 │   └── common/         # Shared config structs and error types
 ├── dashboard/          # React/TypeScript web dashboard
@@ -142,6 +148,14 @@ bot_detection:
     - Googlebot
     - Bingbot
 
+geoip:
+  enabled: true
+  database_path: "/path/to/GeoLite2-Country.mmdb"
+  blocked_countries: ["CN", "RU"]   # ISO 3166-1 alpha-2 codes
+  allowed_countries: []              # if set, only listed countries allowed
+  mode: block                        # block | detect
+  default_action: allow              # allow | block (when country unknown)
+
 anti_scraping:
   enabled: true
   mode: detect                     # block | challenge | detect
@@ -173,6 +187,7 @@ anti_scraping:
 | `/api/stats` | GET | Traffic statistics |
 | `/api/bot-stats` | GET | Bot detection statistics |
 | `/api/scraping-stats` | GET | Anti-scraping statistics |
+| `/api/geoip-stats` | GET | GeoIP filtering statistics |
 
 ```bash
 # Check health
@@ -257,6 +272,42 @@ curl http://localhost:9090/api/scraping-stats
 # Returns: { scrapers_blocked, traps_triggered, captchas_issued, captchas_solved, responses_obfuscated, captcha_pass_rate }
 ```
 
+## GeoIP Filtering
+
+The GeoIP module blocks or detects requests based on the originating country, using MaxMind GeoLite2 `.mmdb` databases. It sits in the request pipeline after IP reputation but before rate limiting.
+
+### Modes
+
+- **`block`** — Requests from blocked countries (or countries not in the allowlist) are rejected with 403.
+- **`detect`** — All requests proceed, but the country is logged and tracked in metrics.
+
+### Country Lists
+
+Two mutually exclusive list modes:
+
+- **Blocklist** — Specify `blocked_countries` (e.g., `["CN", "RU"]`); all other countries are allowed.
+- **Allowlist** — Specify `allowed_countries` (e.g., `["US", "GB"]`); all other countries are blocked.
+
+If both are configured, the allowlist takes precedence.
+
+### Default Action
+
+When the country cannot be determined (private IPs, lookup failures):
+
+- **`allow`** (default) — Unknown IPs are allowed through.
+- **`block`** — Unknown IPs are blocked (strict mode).
+
+### Hot Reload
+
+The `.mmdb` database file is loaded via `ArcSwap` for lock-free reads, supporting hot-reload without downtime.
+
+```bash
+# View GeoIP stats
+curl http://localhost:9090/api/geoip-stats
+
+# Returns: { geoip_blocked, geoip_lookups, enabled, blocked_countries, allowed_countries }
+```
+
 ## Dashboard
 
 The React/TypeScript dashboard is served from the admin API when `server.admin.dashboard` is enabled.
@@ -271,7 +322,7 @@ npm run dev:mock    # Starts mock server on :9090 + Vite on :5173
 npm run build       # Output in dashboard/dist/
 ```
 
-Pages: Dashboard (traffic overview), Audit Logs, WAF Rules, Bot Detection (analytics + pie chart), Anti-Scraping (scraper stats + honeypot/CAPTCHA metrics), Configuration (structured editor), Metrics (Prometheus).
+Pages: Dashboard (traffic overview), Audit Logs, WAF Rules, Bot Detection (analytics + pie chart), Anti-Scraping (scraper stats + honeypot/CAPTCHA metrics), GeoIP (country filtering stats + blocklist display), Configuration (structured editor), Metrics (Prometheus).
 
 ## Docker
 
@@ -294,6 +345,9 @@ cargo test -p layer7waf-bot-detect
 # Run anti-scraping tests only
 cargo test -p layer7waf-anti-scraping
 
+# Run GeoIP tests only
+cargo test -p layer7waf-geoip
+
 # Build dashboard
 cd dashboard && npm run build
 
@@ -307,6 +361,7 @@ cd dashboard && npm run build
 - **Phase 2** &#10003;: Web dashboard (React + TypeScript)
 - **Phase 3** &#10003;: Bot detection (HTTP fingerprinting, JS challenges, scoring)
 - **Phase 4** &#10003;: Anti-scraping (CAPTCHA, content honeypots, dynamic obfuscation)
+- **Phase 5** &#10003;: GeoIP filtering (country-based blocking/detection, MaxMind GeoLite2)
 - **Future**: TLS fingerprinting (JA3/JA4) when Pingora exposes Client Hello data
 
 ## License

@@ -83,6 +83,14 @@ export function useScrapingStats() {
   });
 }
 
+export function useGeoIpStats() {
+  return useQuery({
+    queryKey: ["geoip-stats"],
+    queryFn: api.getGeoIpStats,
+    refetchInterval: 5000,
+  });
+}
+
 export function useBotStats() {
   return useQuery({
     queryKey: ["bot-stats"],

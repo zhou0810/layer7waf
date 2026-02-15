@@ -4,6 +4,7 @@ use http::StatusCode;
 use layer7waf_anti_scraping::{AntiScraper, ScrapingCheckResult};
 use layer7waf_bot_detect::{BotCheckResult, BotDetector};
 use layer7waf_common::{AppConfig, WafMode};
+use layer7waf_geoip::{GeoIpAction, GeoIpFilter};
 use layer7waf_coraza::{WafAction, WafEngine, WafTransaction};
 use layer7waf_ip_reputation::IpReputation;
 use layer7waf_rate_limit::RateLimiter;
@@ -12,6 +13,7 @@ use pingora_core::upstreams::peer::HttpPeer;
 use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_proxy::{ProxyHttp, Session};
 use prometheus::{HistogramVec, IntCounter, IntCounterVec, Registry};
+use std::net::IpAddr;
 use std::sync::{Arc, RwLock};
 use tracing::{debug, error, info, warn};
 
@@ -26,6 +28,7 @@ pub struct Layer7WafProxy {
     pub ip_reputation: Arc<IpReputation>,
     pub bot_detector: Option<Arc<BotDetector>>,
     pub anti_scraper: Option<Arc<AntiScraper>>,
+    pub geoip_filter: Option<Arc<GeoIpFilter>>,
     pub metrics: Arc<ProxyMetrics>,
 }
 
@@ -44,6 +47,8 @@ pub struct ProxyMetrics {
     pub captchas_issued: IntCounter,
     pub captchas_solved: IntCounter,
     pub responses_obfuscated: IntCounter,
+    pub geoip_blocked: IntCounter,
+    pub geoip_lookups: IntCounter,
 }
 
 impl ProxyMetrics {
@@ -92,6 +97,10 @@ impl ProxyMetrics {
             IntCounter::new("layer7waf_captchas_solved", "Total CAPTCHAs solved").unwrap();
         let responses_obfuscated =
             IntCounter::new("layer7waf_responses_obfuscated", "Total responses obfuscated").unwrap();
+        let geoip_blocked =
+            IntCounter::new("layer7waf_geoip_blocked", "Total requests blocked by GeoIP").unwrap();
+        let geoip_lookups =
+            IntCounter::new("layer7waf_geoip_lookups", "Total GeoIP lookups performed").unwrap();
 
         registry.register(Box::new(requests_total.clone())).unwrap();
         registry
@@ -126,6 +135,12 @@ impl ProxyMetrics {
         registry
             .register(Box::new(responses_obfuscated.clone()))
             .unwrap();
+        registry
+            .register(Box::new(geoip_blocked.clone()))
+            .unwrap();
+        registry
+            .register(Box::new(geoip_lookups.clone()))
+            .unwrap();
 
         Self {
             registry,
@@ -142,6 +157,8 @@ impl ProxyMetrics {
             captchas_issued,
             captchas_solved,
             responses_obfuscated,
+            geoip_blocked,
+            geoip_lookups,
         }
     }
 }
@@ -229,6 +246,27 @@ impl Layer7WafProxy {
             None
         };
 
+        // Initialize GeoIP filter
+        let geoip_filter = if config.geoip.enabled {
+            match GeoIpFilter::new(config.geoip.clone()) {
+                Ok(filter) => {
+                    info!(
+                        mode = ?config.geoip.mode,
+                        blocked_countries = ?config.geoip.blocked_countries,
+                        allowed_countries = ?config.geoip.allowed_countries,
+                        "GeoIP filtering enabled"
+                    );
+                    Some(Arc::new(filter))
+                }
+                Err(e) => {
+                    warn!(error = %e, "failed to initialize GeoIP filter, continuing without it");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         let metrics = Arc::new(ProxyMetrics::new());
 
         Self {
@@ -239,6 +277,7 @@ impl Layer7WafProxy {
             ip_reputation,
             bot_detector,
             anti_scraper,
+            geoip_filter,
             metrics,
         }
     }
@@ -342,6 +381,50 @@ impl ProxyHttp for Layer7WafProxy {
                     return Ok(false);
                 }
                 layer7waf_ip_reputation::IpAction::None => {}
+            }
+        }
+
+        // 1.5 GeoIP check
+        if let Some(ref geoip) = self.geoip_filter {
+            if let Ok(addr) = ctx.client_ip.parse::<IpAddr>() {
+                self.metrics.geoip_lookups.inc();
+                match geoip.check(addr) {
+                    GeoIpAction::Block { country } => {
+                        info!(
+                            client_ip = %ctx.client_ip,
+                            country = %country,
+                            "request blocked by GeoIP"
+                        );
+                        ctx.geo_country = Some(country.clone());
+                        ctx.block_reason = Some(BlockReason::GeoBlocked { country });
+                        self.metrics.geoip_blocked.inc();
+                        self.metrics.requests_blocked.inc();
+                        let mut resp =
+                            ResponseHeader::build(StatusCode::FORBIDDEN, Some(4)).unwrap();
+                        resp.insert_header("content-type", "text/plain").unwrap();
+                        session.set_keepalive(None);
+                        session
+                            .write_response_header(Box::new(resp), false)
+                            .await?;
+                        session
+                            .write_response_body(
+                                Some(Bytes::from("Forbidden: blocked by country\n")),
+                                true,
+                            )
+                            .await?;
+                        return Ok(true);
+                    }
+                    GeoIpAction::Detect { country } => {
+                        ctx.geo_country = Some(country.clone());
+                        debug!(
+                            client_ip = %ctx.client_ip,
+                            country = %country,
+                            "GeoIP detected country (detect mode)"
+                        );
+                    }
+                    GeoIpAction::Allow => {}
+                    GeoIpAction::Unknown => {}
+                }
             }
         }
 
@@ -832,6 +915,7 @@ impl ProxyHttp for Layer7WafProxy {
             duration_ms = duration.as_millis() as u64,
             blocked,
             block_reason = ?ctx.block_reason,
+            geo_country = ?ctx.geo_country,
             "request completed"
         );
 
