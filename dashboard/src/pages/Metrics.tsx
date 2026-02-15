@@ -207,27 +207,27 @@ export function Metrics() {
                   <div className="h-[400px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={histogramChartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.269 0 0)" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="#2e2e2e" />
                         <XAxis
                           dataKey="bucket"
-                          stroke="oklch(0.708 0 0)"
+                          stroke="#a0a0a0"
                           fontSize={12}
                           tickLine={false}
                         />
                         <YAxis
-                          stroke="oklch(0.708 0 0)"
+                          stroke="#a0a0a0"
                           fontSize={12}
                           tickLine={false}
                         />
                         <Tooltip
                           contentStyle={{
-                            backgroundColor: "oklch(0.17 0 0)",
-                            border: "1px solid oklch(0.269 0 0)",
+                            backgroundColor: "#1c1c1c",
+                            border: "1px solid #2e2e2e",
                             borderRadius: "0.5rem",
-                            color: "oklch(0.985 0 0)",
+                            color: "#f5f5f5",
                           }}
                         />
-                        <Bar dataKey="count" fill="oklch(0.488 0.243 264.376)" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>

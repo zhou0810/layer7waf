@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback } from "react";
 import { Activity, ShieldAlert, Clock, Gauge } from "lucide-react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { PieChart, Pie, Cell, Tooltip } from "recharts";
 import { useHealth, useStats } from "@/hooks/use-api";
 import { StatsCard } from "@/components/StatsCard";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -71,7 +71,7 @@ export function Dashboard() {
       ]
     : [];
 
-  const PIE_COLORS = ["oklch(0.488 0.243 264.376)", "oklch(0.645 0.246 16.439)"];
+  const PIE_COLORS = ["#3b82f6", "#ef4444"];
 
   const hasError = healthError || statsError;
 
@@ -145,49 +145,53 @@ export function Dashboard() {
             <CardTitle className="text-base">Block Rate</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px] flex flex-col items-center justify-center">
-              {stats && stats.total_requests > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={90}
-                      dataKey="value"
-                      strokeWidth={0}
-                    >
-                      {pieData.map((_entry, index) => (
-                        <Cell key={index} fill={PIE_COLORS[index]} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "oklch(0.17 0 0)",
-                        border: "1px solid oklch(0.269 0 0)",
-                        borderRadius: "0.5rem",
-                        color: "oklch(0.985 0 0)",
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : statsLoading ? (
-                <Skeleton className="h-[180px] w-[180px] rounded-full" />
-              ) : (
-                <p className="text-muted-foreground text-sm">No traffic data yet</p>
-              )}
-              <div className="flex gap-4 text-xs text-muted-foreground mt-2">
-                <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: PIE_COLORS[0] }} />
-                  Allowed
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: PIE_COLORS[1] }} />
-                  Blocked
-                </span>
+            {stats && stats.total_requests > 0 ? (
+              <div className="flex flex-col items-center">
+                <PieChart width={220} height={220}>
+                  <Pie
+                    data={pieData}
+                    cx={110}
+                    cy={110}
+                    innerRadius={60}
+                    outerRadius={90}
+                    dataKey="value"
+                    strokeWidth={0}
+                    isAnimationActive={false}
+                  >
+                    {pieData.map((_entry, index) => (
+                      <Cell key={index} fill={PIE_COLORS[index]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#1c1c1c",
+                      border: "1px solid #2e2e2e",
+                      borderRadius: "0.5rem",
+                      color: "#f5f5f5",
+                    }}
+                  />
+                </PieChart>
+                <p className="text-2xl font-bold mt-2">{blockRate}%</p>
+                <div className="flex gap-4 text-xs text-muted-foreground mt-2">
+                  <span className="flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: PIE_COLORS[0] }} />
+                    Allowed
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: PIE_COLORS[1] }} />
+                    Blocked
+                  </span>
+                </div>
               </div>
-            </div>
+            ) : statsLoading ? (
+              <div className="h-[300px] flex items-center justify-center">
+                <Skeleton className="h-[180px] w-[180px] rounded-full" />
+              </div>
+            ) : (
+              <div className="h-[300px] flex items-center justify-center">
+                <p className="text-muted-foreground text-sm">No traffic data yet</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
