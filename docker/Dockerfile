@@ -6,7 +6,16 @@ COPY crates/coraza/go/ ./
 RUN go mod download
 RUN CGO_ENABLED=1 go build -buildmode=c-shared -o /build/libcoraza_bridge.so .
 
-# Stage 2: Build Rust binary
+# Stage 2: Build dashboard
+FROM node:20-bookworm-slim AS dashboard-builder
+
+WORKDIR /build/dashboard
+COPY dashboard/package.json dashboard/package-lock.json* ./
+RUN npm ci
+COPY dashboard/ ./
+RUN npm run build
+
+# Stage 3: Build Rust binary
 FROM rust:1.77-bookworm AS rust-builder
 
 # Install Go for the coraza build.rs (it re-compiles the Go code)
@@ -25,7 +34,7 @@ COPY --from=go-builder /go/pkg/mod /root/go/pkg/mod
 # Build release binary
 RUN cargo build --release --bin layer7waf
 
-# Stage 3: Runtime
+# Stage 4: Runtime
 FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -43,6 +52,10 @@ COPY --from=rust-builder /build/target/release/layer7waf /usr/local/bin/layer7wa
 # Copy Go shared library
 COPY --from=go-builder /build/libcoraza_bridge.so /usr/local/lib/
 RUN ldconfig
+
+# Copy dashboard
+COPY --from=dashboard-builder /build/dashboard/dist /usr/share/layer7waf/dashboard
+ENV DASHBOARD_DIR=/usr/share/layer7waf/dashboard
 
 # Copy default config
 COPY config/layer7waf.yaml /etc/layer7waf/layer7waf.yaml
